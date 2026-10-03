@@ -1,0 +1,14 @@
+{
+  "background": "#00FF00",
+  "rows": [
+    [
+      "wall_rock_red",
+      "wall_rock_grey",
+      "wall_guardrail",
+      "wall_seawall",
+      "wall_hedge",
+      "wall_bridge_rail",
+      "wall_town_facades"
+    ]
+  ]
+}

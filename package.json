@@ -1,0 +1,30 @@
+{
+  "name": "teb-run",
+  "private": true,
+  "license": "SEE LICENSE IN LICENSE",
+  "version": "0.1.0",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "npm run build:site",
+    "build:private": "tsc --noEmit && vite build --mode private",
+    "build:site": "tsc --noEmit && vite build --mode site",
+    "build:portal": "tsc --noEmit && vite build --mode portal && node tools/zip-build.mjs dist-portal dist-portal.zip",
+    "check:builds": "node tools/check-builds.mjs",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "e2e": "playwright test",
+    "e2e:install": "playwright install chromium"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "@types/node": "^22.20.4",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.1",
+    "vitest": "^5.0.2"
+  }
+}

@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>TEB RUN — audio dev</title>
+    <style>
+      body {
+        background: #101018;
+        color: #e8e8f0;
+        font: 14px/1.5 system-ui, sans-serif;
+        margin: 0;
+        padding: 24px;
+      }
+      h1 { font-size: 18px; margin: 0 0 16px; }
+      section {
+        border: 1px solid #2c2c3c;
+        border-radius: 6px;
+        padding: 12px 16px;
+        margin-bottom: 16px;
+        max-width: 760px;
+      }
+      h2 {
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #9aa;
+        margin: 0 0 10px;
+      }
+      button {
+        background: #26263a;
+        color: #e8e8f0;
+        border: 1px solid #40405a;
+        border-radius: 4px;
+        padding: 6px 12px;
+        margin: 0 6px 6px 0;
+        cursor: pointer;
+        font: inherit;
+      }
+      button:hover { background: #34344e; }
+      label,
+      span { margin-right: 18px; }
+      #status { font-family: ui-monospace, monospace; white-space: pre; color: #8f8; }
+    </style>
+  </head>
+  <body>
+    <h1>TEB RUN — pagina di prova audio</h1>
+    <section>
+      <h2>Radio</h2>
+      <div id="songs"></div>
+      <button id="stop">stop song</button>
+    </section>
+    <section>
+      <h2>Effetti</h2>
+      <div id="sfx"></div>
+    </section>
+    <section>
+      <h2>Motore</h2>
+      <label>speedPercent <input id="speed" type="range" min="0" max="100" value="0" /></label>
+      <label><input id="running" type="checkbox" checked /> running</label>
+      <span>gear <button id="gear">lo</button></span>
+      <label><input id="skid" type="checkbox" /> skid</label>
+    </section>
+    <section>
+      <h2>Master</h2>
+      <button id="mute">toggle mute</button>
+      <p>
+        Tastiera: Su/Z accelera, Giù/X frena, Shift/C cambia marcia,
+        Sinistra/Destra derapata sopra il 60%, M muto.
+      </p>
+    </section>
+    <section>
+      <h2>Stato</h2>
+      <div id="status">—</div>
+    </section>
+    <script type="module" src="/src/dev/audio.ts"></script>
+  </body>
+</html>

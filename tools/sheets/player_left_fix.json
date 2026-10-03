@@ -1,0 +1,24 @@
+{
+  "background": "auto",
+  "groups": [
+    {
+      "box": [
+        0,
+        0,
+        2172,
+        724
+      ],
+      "target": "player_strip_turn",
+      "cuts": [
+        19,
+        1001,
+        2155
+      ],
+      "names": [
+        "player_right1",
+        "player_right2"
+      ]
+    }
+  ],
+  "_nota": "fianco DESTRO visibile = l'auto gira a DESTRA (vista da dietro): frame right1/right2"
+}

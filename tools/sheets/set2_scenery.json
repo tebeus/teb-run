@@ -1,0 +1,29 @@
+{
+  "background": "#00FF00",
+  "rows": [
+    [
+      "common_sign_chevron",
+      "common_sign_speed",
+      "common_lamp_highway",
+      "common_bridge_pylon",
+      "common_boulder_large",
+      "beach_lifeguard_tower"
+    ],
+    [
+      "beach_boat",
+      "beach_rock_arch",
+      "desert_pillar",
+      "desert_bush_dry",
+      "alpine_snow_pine",
+      "alpine_signpost"
+    ],
+    [
+      "farm_tractor",
+      "farm_fence_wood",
+      "farm_silo",
+      "town_cafe",
+      "town_bus_stop",
+      "town_tower"
+    ]
+  ]
+}

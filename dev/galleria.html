@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>TEB RUN, galleria sprite</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: system-ui, sans-serif;
+      }
+      body {
+        margin: 0;
+        padding: 16px 20px 48px;
+        background: #14121c;
+        color: #f1eee8;
+      }
+      #summary {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        margin: 0 -20px 20px;
+        padding: 12px 20px;
+        background: #221d33;
+        border-bottom: 2px solid #3b3358;
+        font-size: 15px;
+        font-weight: 600;
+      }
+      h1 {
+        margin: 28px 0 10px;
+        font-size: 15px;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        color: #c9b8ff;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+        gap: 14px;
+      }
+      .card {
+        margin: 0;
+        padding: 8px;
+        background: #1d1a29;
+        border: 1px solid #332c4a;
+        border-radius: 8px;
+      }
+      .thumb {
+        width: 100%;
+        height: auto;
+        border-radius: 4px;
+        background-color: #2a2635;
+        background-image: linear-gradient(45deg, #201d2b 25%, transparent 25%, transparent 75%, #201d2b 75%),
+          linear-gradient(45deg, #201d2b 25%, transparent 25%, transparent 75%, #201d2b 75%);
+        background-size: 20px 20px;
+        background-position: 0 0, 10px 10px;
+      }
+      .card h2 {
+        margin: 8px 0 2px;
+        font-size: 13px;
+      }
+      .meta {
+        margin: 0;
+        font-size: 11px;
+        color: #a79ec4;
+      }
+      .meta.png {
+        color: #7be08a;
+      }
+      .meta.missing {
+        color: #ff6b9a;
+        font-weight: 700;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="summary">caricamento…</div>
+    <div id="gallery"></div>
+    <script type="module" src="/src/dev/galleria.ts"></script>
+  </body>
+</html>

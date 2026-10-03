@@ -1,0 +1,10 @@
+{
+  "background": "#00FF00",
+  "rows": [
+    [
+      "traffic_sportscar",
+      "traffic_bus",
+      "traffic_pickup"
+    ]
+  ]
+}

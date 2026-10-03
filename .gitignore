@@ -1,0 +1,28 @@
+node_modules/
+dist/
+dist-site/
+dist-portal/
+dist-portal.zip
+.DS_Store
+e2e/out/
+test-results/
+playwright-report/
+art/raw/**/*.png
+art/raw/*.png
+!art/raw/.gitkeep
+art/audio-raw/**/*.wav
+art/audio-raw/**/*.flac
+.claude/worktrees/
+.claude/settings.local.json
+.superpowers/
+tools/__pycache__/
+# Conversioni WebP delle build site e portal (tools/webp-sprites.py)
+.cache/
+art/reference/
+
+# Brani personali dell'utente: suoi, non nostri. Il README resta, e il
+# manifest vuoto di partenza (generato dal tool, sovrascritto appena l'utente
+# esegue `process-audio.py --music` sui propri file).
+public/music/custom/*
+!public/music/custom/README.md
+!public/music/custom/manifest.json

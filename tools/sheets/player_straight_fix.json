@@ -1,0 +1,22 @@
+{
+  "background": "auto",
+  "groups": [
+    {
+      "box": [
+        0,
+        0,
+        1514,
+        1039
+      ],
+      "target": "player_strip_turn",
+      "cuts": [
+        0,
+        1514
+      ],
+      "names": [
+        "player_straight"
+      ]
+    }
+  ],
+  "_nota": "vista dritta definitiva (Set 6)"
+}

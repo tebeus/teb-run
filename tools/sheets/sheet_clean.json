@@ -1,0 +1,284 @@
+{
+  "background": "auto",
+  "ignoreAt": [
+    [
+      1230,
+      200
+    ]
+  ],
+  "groups": [
+    {
+      "box": [
+        20,
+        10,
+        1460,
+        143
+      ],
+      "target": "player_strip_turn",
+      "cuts": [
+        30,
+        221,
+        441,
+        650,
+        790,
+        969,
+        1082,
+        1279,
+        1450
+      ],
+      "names": [
+        "_skip",
+        "_skip",
+        "_skip",
+        "_skip",
+        "_skip",
+        "_skip",
+        "_skip",
+        "_skip"
+      ]
+    },
+    {
+      "box": [
+        10,
+        145,
+        940,
+        306
+      ],
+      "cuts": [
+        10,
+        218,
+        408,
+        602,
+        811,
+        940
+      ],
+      "names": [
+        "traffic_sedan",
+        "traffic_hatchback",
+        "traffic_van",
+        "traffic_truck",
+        "traffic_bike"
+      ]
+    },
+    {
+      "box": [
+        10,
+        292,
+        785,
+        488
+      ],
+      "cuts": [
+        10,
+        158,
+        272,
+        387,
+        532,
+        650,
+        785
+      ],
+      "names": [
+        "beach_palm_1",
+        "beach_palm_2",
+        "beach_umbrella",
+        "beach_hut",
+        "beach_surf_sign",
+        "beach_bush"
+      ]
+    },
+    {
+      "box": [
+        790,
+        306,
+        1530,
+        488
+      ],
+      "cuts": [
+        790,
+        864,
+        983,
+        1179,
+        1305,
+        1411,
+        1520
+      ],
+      "names": [
+        "desert_cactus_1",
+        "desert_cactus_2",
+        "desert_rock_1",
+        "desert_rock_2",
+        "desert_dead_tree",
+        "desert_skull_sign"
+      ]
+    },
+    {
+      "box": [
+        20,
+        489,
+        760,
+        612
+      ],
+      "cuts": [
+        20,
+        98,
+        177,
+        386,
+        477,
+        612,
+        760
+      ],
+      "names": [
+        "alpine_pine_1",
+        "alpine_pine_2",
+        "alpine_chalet",
+        "alpine_fence",
+        "alpine_rock",
+        "alpine_cow"
+      ]
+    },
+    {
+      "box": [
+        760,
+        489,
+        1525,
+        612
+      ],
+      "cuts": [
+        760,
+        895,
+        996,
+        1135,
+        1247,
+        1412,
+        1525
+      ],
+      "names": [
+        "farm_haybale",
+        "farm_windmill",
+        "farm_barn",
+        "farm_vine_row",
+        "farm_oak",
+        "farm_sunflowers"
+      ]
+    },
+    {
+      "box": [
+        20,
+        612,
+        600,
+        760
+      ],
+      "cuts": [
+        20,
+        190,
+        303,
+        423,
+        600
+      ],
+      "names": [
+        "common_billboard",
+        "common_bush_1",
+        "common_bush_2",
+        "common_boulder"
+      ]
+    },
+    {
+      "box": [
+        780,
+        612,
+        1530,
+        760
+      ],
+      "cuts": [
+        790,
+        888,
+        1042,
+        1097,
+        1150,
+        1258,
+        1406,
+        1500
+      ],
+      "names": [
+        "_skip",
+        "town_arch",
+        "town_column",
+        "town_lamp",
+        "town_facade",
+        "town_fountain",
+        "town_cypress"
+      ]
+    },
+    {
+      "box": [
+        6,
+        768,
+        1531,
+        814
+      ],
+      "keepAll": true,
+      "cuts": [
+        6,
+        313,
+        630,
+        903,
+        1223,
+        1531
+      ],
+      "names": [
+        "bg_beach_far",
+        "bg_desert_far",
+        "bg_alpine_far",
+        "bg_farm_far",
+        "bg_town_far"
+      ]
+    },
+    {
+      "box": [
+        6,
+        814,
+        1531,
+        879
+      ],
+      "keepAll": true,
+      "cuts": [
+        6,
+        313,
+        630,
+        903,
+        1223,
+        1531
+      ],
+      "names": [
+        "bg_beach_near",
+        "bg_desert_near",
+        "bg_alpine_near",
+        "bg_farm_near",
+        "bg_town_near"
+      ]
+    },
+    {
+      "box": [
+        6,
+        885,
+        1531,
+        1017
+      ],
+      "keepAll": true,
+      "cuts": [
+        6,
+        307,
+        610,
+        913,
+        1213,
+        1531
+      ],
+      "names": [
+        "ending_1",
+        "ending_2",
+        "ending_3",
+        "ending_4",
+        "ending_5"
+      ]
+    }
+  ]
+}

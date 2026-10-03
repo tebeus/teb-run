@@ -1,0 +1,24 @@
+{
+  "background": "auto",
+  "groups": [
+    {
+      "box": [
+        0,
+        0,
+        2172,
+        724
+      ],
+      "target": "player_strip_turn",
+      "cuts": [
+        49,
+        1035,
+        2134
+      ],
+      "names": [
+        "player_left1",
+        "player_left2"
+      ]
+    }
+  ],
+  "_nota": "fianco SINISTRO visibile = l'auto gira a SINISTRA (vista da dietro): frame left1/left2"
+}

@@ -1,0 +1,54 @@
+{
+  "background": "auto",
+  "groups": [
+    {
+      "box": [
+        0,
+        100,
+        2172,
+        372
+      ],
+      "target": "player_strip_turn",
+      "cuts": [
+        30,
+        410,
+        866,
+        1350,
+        1758,
+        2165
+      ],
+      "names": [
+        "_skip",
+        "_skip",
+        "_skip",
+        "_skip",
+        "_skip"
+      ]
+    },
+    {
+      "box": [
+        0,
+        410,
+        2172,
+        682
+      ],
+      "target": "player_strip_turn",
+      "cuts": [
+        20,
+        372,
+        943,
+        1271,
+        1771,
+        2160
+      ],
+      "names": [
+        "player_spin_0",
+        "player_spin_1",
+        "player_spin_2",
+        "player_spin_3",
+        "player_brake"
+      ]
+    }
+  ],
+  "_nota": "solo incidente e frenata: dritta da player_straight_fix, left/right dai fogli fix"
+}
