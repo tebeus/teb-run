@@ -4,6 +4,8 @@
 // tasto F e col clic o il tocco sul canvas; niente di tutto questo passa da
 // `createInput`, perché requestFullscreen vuole il gesto dell'utente dentro
 // l'handler dell'evento, non nel tick della simulazione.
+// Nella build crazygames niente pulsante né tasto F (lo schermo intero lo dà
+// il portale) e niente ABOUT: resta solo PRIVACY.
 
 import { LOGICAL_H, LOGICAL_W } from '../core/canvas';
 import {
@@ -15,7 +17,7 @@ import {
   type FullscreenTarget,
 } from '../core/fullscreen';
 import { ABOUT_URL, PRIVACY_URL } from '../core/config';
-import { FEATURES, type TargetFeatures } from '../core/target';
+import { ABOUT_BUILD, FEATURES, FULLSCREEN_BUILD, type TargetFeatures } from '../core/target';
 import type { ScreenName } from './fsm';
 import { inside, touchRect, type Rect } from './rect';
 
@@ -92,10 +94,13 @@ export interface TitleLink {
   url: string;
 }
 
-export const TITLE_LINKS: readonly TitleLink[] = [
-  { label: 'PRIVACY', url: PRIVACY_URL },
-  { label: 'ABOUT', url: ABOUT_URL },
-];
+/** PRIVACY sempre; ABOUT no nella build crazygames (`ABOUT_BUILD`). */
+export const TITLE_LINKS: readonly TitleLink[] = ABOUT_BUILD
+  ? [
+      { label: 'PRIVACY', url: PRIVACY_URL },
+      { label: 'ABOUT', url: ABOUT_URL },
+    ]
+  : [{ label: 'PRIVACY', url: PRIVACY_URL }];
 
 /** Scala del font dei link: piccoli, glifi alti 16 px. */
 export const LINK_SCALE = 2;
@@ -167,7 +172,9 @@ export interface LaunchUi {
 export function installLaunchUi(win: Window, canvas: HTMLCanvasElement, screen: () => ScreenName): LaunchUi {
   const doc = win.document as unknown as FullscreenDoc & Document;
   const root = win.document.documentElement as unknown as FullscreenTarget;
-  const available = canFullscreen(doc, root);
+  // Senza `FULLSCREEN_BUILD` (crazygames) il pulsante non c'è mai, e il
+  // bundler toglie le chiamate a requestFullscreen.
+  const available = FULLSCREEN_BUILD && canFullscreen(doc, root);
   const button = fullscreenButtonRect();
 
   const cssPerLogical = (): number => canvas.getBoundingClientRect().width / LOGICAL_W;
@@ -190,13 +197,13 @@ export function installLaunchUi(win: Window, canvas: HTMLCanvasElement, screen: 
 
   win.addEventListener('keydown', (e) => {
     if (e.code !== 'KeyF' || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
-    if (!showsFullscreenButton(screen(), available)) return;
+    if (!FULLSCREEN_BUILD || !showsFullscreenButton(screen(), available)) return;
     e.preventDefault();
     toggleFullscreen(doc, root);
   });
   canvas.addEventListener('click', (e) => {
     const p = toLogical(e.clientX, e.clientY, canvas.getBoundingClientRect());
-    if (hitButton(p.x, p.y)) {
+    if (FULLSCREEN_BUILD && hitButton(p.x, p.y)) {
       toggleFullscreen(doc, root);
       return;
     }

@@ -58,3 +58,17 @@ describe('createLoop glue (fake requestAnimationFrame)', () => {
     loop.stop();
   });
 });
+
+describe('same physics at any refresh rate (CrazyGames: 60, 120, 144, 165 Hz)', () => {
+  test.each([60, 120, 144, 165, 59.94])('%s Hz: 10 s give 600 fixed steps of 1/60 s', (hz) => {
+    const dts: number[] = [];
+    const loop = createLoop({ update: (dt) => dts.push(dt), render: () => undefined });
+    loop.start();
+    const frames = Math.round(10 * hz);
+    for (let i = 0; i <= frames; i++) cbs.shift()!(1000 + (i * 1000) / hz);
+    loop.stop();
+    // Il passo è sempre lo stesso: la simulazione non vede la frequenza dello schermo.
+    expect(new Set(dts)).toEqual(new Set([1 / 60]));
+    expect(Math.abs(dts.length - Math.round((frames / hz) * 60))).toBeLessThanOrEqual(1);
+  });
+});

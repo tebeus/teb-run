@@ -12,6 +12,8 @@ import { drawTextOutlined } from '../text';
 import { LOGICAL_H, LOGICAL_W } from '../../core/canvas';
 import { stagedOf } from '../../core/assets';
 import { successorIds } from '../../core/phases';
+import { GAMEPLAY } from '../../core/gameplayEvents';
+import { GAMEPLAY_EVENTS_BUILD } from '../../core/target';
 import { STAGES } from '../../game/stages';
 
 /** Il payload di ingresso in gara: valida `song`, con 0 come default sicuro. Pura. */
@@ -216,6 +218,9 @@ export function createRaceScreen(deps: ScreenDeps): Screen {
     },
     update(dt, actions) {
       if (!engine) return null;
+      // Eventi di gioco per l'SDK del portale (solo build crazygames): in
+      // corsa, in pausa o no. Lo stato è quello del tick prima.
+      if (GAMEPLAY_EVENTS_BUILD) GAMEPLAY.race(pause.open);
       const tap = deps.signals?.takeTap() ?? null;
       const focusLost = deps.signals?.takeFocusLost() ?? false;
       if (pause.open) {
@@ -308,6 +313,7 @@ export function createRaceScreen(deps: ScreenDeps): Screen {
       else if (hintT !== null) drawRaceHint(ctx, device, raceHintAlpha(hintT), deps.tiltOn?.() === true);
     },
     exit() {
+      if (GAMEPLAY_EVENTS_BUILD) GAMEPLAY.raceOver();
       deps.audio.setEngine(0, 'lo', false);
       deps.audio.setSkid(false);
       deps.audio.setRumble(false, 0);

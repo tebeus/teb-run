@@ -3,6 +3,8 @@ dist/
 dist-site/
 dist-portal/
 dist-portal.zip
+dist-crazygames/
+dist-crazygames.zip
 .DS_Store
 e2e/out/
 test-results/

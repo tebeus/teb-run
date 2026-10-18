@@ -13,6 +13,7 @@
     "build:private": "tsc --noEmit && vite build --mode private",
     "build:site": "tsc --noEmit && vite build --mode site",
     "build:portal": "tsc --noEmit && vite build --mode portal && node tools/zip-build.mjs dist-portal dist-portal.zip",
+    "build:crazygames": "tsc --noEmit && vite build --mode crazygames && node tools/zip-build.mjs dist-crazygames dist-crazygames.zip",
     "check:builds": "node tools/check-builds.mjs",
     "preview": "vite preview",
     "test": "vitest run",

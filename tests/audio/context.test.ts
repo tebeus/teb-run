@@ -195,6 +195,26 @@ describe('createAudioHost with a context', () => {
     expect(host.ctx).toBe(first);
   });
 
+  test('iOS: after an interruption (call, background) the next gesture resumes the context', async () => {
+    const host = createAudioHost({ AudioContext: fakeCtor() });
+    host.unlock();
+    await Promise.resolve();
+    const ctx = host.ctx as unknown as FakeAudioContext;
+    expect(host.running).toBe(true);
+    expect(ctx.resumed).toBe(1);
+    // Un gesto con il contesto che gira non lo tocca.
+    host.unlock();
+    expect(ctx.resumed).toBe(1);
+    for (const state of ['interrupted', 'suspended']) {
+      ctx.state = state;
+      expect(host.running).toBe(false);
+      host.unlock();
+      await Promise.resolve();
+      expect(host.running, state).toBe(true);
+    }
+    expect(ctx.resumed).toBe(3);
+  });
+
   test('toggleMute twice returns to audible and ramps the master gain', () => {
     const host = createAudioHost({ AudioContext: fakeCtor() });
     host.unlock();

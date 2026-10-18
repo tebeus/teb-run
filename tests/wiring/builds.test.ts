@@ -1,4 +1,4 @@
-// Le build pubbliche davvero costruite: site e portal in una cartella
+// Le build pubbliche davvero costruite: site, portal e crazygames in una cartella
 // temporanea, con lo stesso controllo di `npm run check:builds`. Nessuna
 // build a mano prima: il test la fa da sé (qualche secondo).
 
@@ -12,7 +12,9 @@ import { manifestForTarget, manifestToWebp, publicFileAllowed, shipsAsWebp } fro
 import {
   buildWeights,
   checkBuild,
+  crazyGamesProblems,
   cspProblems,
+  MAX_FILES,
   MAX_INITIAL_BYTES,
   MAX_TOTAL_BYTES,
   nameProblems,
@@ -30,6 +32,7 @@ describe('publicFileAllowed', () => {
       expect(publicFileAllowed(f, 'private'), f).toBe(true);
       expect(publicFileAllowed(f, 'site'), f).toBe(false);
       expect(publicFileAllowed(f, 'portal'), f).toBe(false);
+      expect(publicFileAllowed(f, 'crazygames'), f).toBe(false);
     }
     for (const f of ['sprites/player_straight.png', 'audio/engine_low.ogg', 'style.css']) {
       expect(publicFileAllowed(f, 'site'), f).toBe(true);
@@ -95,9 +98,42 @@ describe('checkBuild catches what must not ship', () => {
       expect(checkBuild(dir, [], 'site')).toContain('no _headers (Cloudflare Pages)');
       writeFileSync(join(dir, '_headers'), '/*');
       expect(checkBuild(dir, [], 'portal')).toContain('_headers in the portal build');
+      expect(checkBuild(dir, [], 'crazygames')).toContain('_headers in the crazygames build');
       expect(nameProblems(['music/custom/mine.mp3', 'music/custom/manifest.json'])).toEqual([
         'personal track: music/custom/mine.mp3',
       ]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('crazyGamesProblems: no cross-promotion, no fullscreen code (CrazyGames requirements)', () => {
+  test('the privacy address passes, whole or as the bare domain the bundle builds it from', () => {
+    expect(crazyGamesProblems('open(`https://tebrun.io/privacy/`)')).toEqual([]);
+    expect(crazyGamesProblems('s=`tebrun.io`,c=`https://${s}`;var l=`${c}/privacy/`')).toEqual([]);
+  });
+
+  test('any other site address, other portals, GitHub, stats, fullscreen and SHARE fail', () => {
+    expect(crazyGamesProblems('"https://tebrun.io/about/"')).toEqual([
+      'names /about/',
+      'names tebrun.io outside the privacy address',
+    ]);
+    expect(crazyGamesProblems('visit https://tebrun.io now')).toEqual(['names tebrun.io outside the privacy address']);
+    expect(crazyGamesProblems('https://play.tebrun.io')).toContain('names play.tebrun.io');
+    expect(crazyGamesProblems('https://tebrun.itch.io/teb-run')).toEqual(['names itch.io']);
+    expect(crazyGamesProblems('https://GitHub.com/tebeus')).toEqual(['names github']);
+    expect(crazyGamesProblems('https://tebrun.goatcounter.com/count')).toEqual(['names goatcounter']);
+    expect(crazyGamesProblems('el.requestFullscreen()')).toEqual(['names requestFullscreen']);
+    expect(crazyGamesProblems('`SHARE NOT AVAILABLE`')).toEqual(['names SHARE NOT AVAILABLE']);
+  });
+
+  test('more than 1500 files fail', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'check-files-'));
+    try {
+      writeFileSync(join(dir, 'index.html'), '<!doctype html>');
+      for (let i = 0; i < MAX_FILES; i++) writeFileSync(join(dir, `f${i}.txt`), '');
+      expect(checkBuild(dir, [])).toContain(`${MAX_FILES + 1} files, over ${MAX_FILES}`);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -129,7 +165,7 @@ describe('cspProblems: the stats origin only in the site build, only in connect-
   });
 });
 
-describe('site and portal, built for real', () => {
+describe('site, portal and crazygames, built for real', () => {
   let dir = '';
   let output = '';
   beforeAll(() => {
@@ -150,15 +186,40 @@ describe('site and portal, built for real', () => {
   test('check:builds passes: no classic file, no source map, no local path or email', () => {
     expect(output).toContain('site: ok');
     expect(output).toContain('portal: ok');
+    expect(output).toContain('crazygames: ok');
   });
 
-  test('the site ships public/_headers as is, the portal does not', () => {
+  test('the site ships public/_headers as is, the portal and crazygames do not', () => {
     expect(read(join(dir, 'site', '_headers'))).toBe(read(join(ROOT, 'public', '_headers')));
     expect(() => read(join(dir, 'portal', '_headers'))).toThrow();
+    // Niente frame-ancestors che fermi l'iframe di CrazyGames: la sola CSP è quella del <meta>, che non la può dire.
+    expect(() => read(join(dir, 'crazygames', '_headers'))).toThrow();
+    expect(read(join(dir, 'crazygames', 'index.html'))).not.toContain('frame-ancestors');
+  });
+
+  test.skipIf(NO_ART)('crazygames keeps the body unselectable, and its zip is ready', () => {
+    expect(read(join(dir, 'crazygames', 'style.css'))).toMatch(/html, body, canvas \{[^}]*\buser-select: none;/);
+    expect(read(join(dir, 'crazygames', 'style.css'))).toMatch(/-webkit-user-select: none;/);
+    expect(readFileSync(join(dir, 'crazygames.zip')).length).toBeGreaterThan(1_000_000);
+  });
+
+  test('crazygames: the privacy address is there, ABOUT, SHARE and the fullscreen code are not', () => {
+    const js = readdirSync(join(dir, 'crazygames', 'assets'))
+      .filter((name) => name.endsWith('.js'))
+      .map((name) => read(join(dir, 'crazygames', 'assets', name)))
+      .join('\n');
+    expect(js).toMatch(/\/privacy\//);
+    expect(crazyGamesProblems(js)).toEqual([]);
+    // Il controllo morde: lo stesso giro sul portal trova pulsante, ABOUT e SHARE.
+    const portal = readdirSync(join(dir, 'portal', 'assets'))
+      .filter((name) => name.endsWith('.js'))
+      .map((name) => read(join(dir, 'portal', 'assets', name)))
+      .join('\n');
+    expect(crazyGamesProblems(portal)).toEqual(['names requestFullscreen', 'names /about/', 'names SHARE NOT AVAILABLE']);
   });
 
   test.skipIf(NO_ART)('the sprites ship as WebP only, and the manifest names files that are there', () => {
-    for (const target of ['site', 'portal']) {
+    for (const target of ['site', 'portal', 'crazygames']) {
       const sprites = readdirSync(join(dir, target, 'sprites'));
       expect(sprites.filter((name) => name.endsWith('.png')), target).toEqual([]);
       const manifest = JSON.parse(read(join(dir, target, 'sprites/manifest.json'))) as Record<string, { file: string }>;
@@ -174,7 +235,7 @@ describe('site and portal, built for real', () => {
   });
 
   test.skipIf(NO_ART)('within the weight limits: 20 MB in all, 8 MB before the title', () => {
-    for (const target of ['site', 'portal']) {
+    for (const target of ['site', 'portal', 'crazygames']) {
       const weights = buildWeights(join(dir, target)) as { total: number; initial: number };
       expect(weights.total, target).toBeLessThanOrEqual(MAX_TOTAL_BYTES);
       expect(weights.initial, target).toBeLessThanOrEqual(MAX_INITIAL_BYTES);
@@ -188,10 +249,11 @@ describe('site and portal, built for real', () => {
     expect(csp('site')).toContain("connect-src 'self' https://tebrun.goatcounter.com");
     expect(csp('site')).toContain("img-src 'self' https://tebrun.goatcounter.com");
     expect(csp('portal')).not.toContain('goatcounter');
+    expect(csp('crazygames')).toBe(csp('portal'));
   });
 
   test('the personal radio manifest ships empty', () => {
-    for (const target of ['site', 'portal']) {
+    for (const target of ['site', 'portal', 'crazygames']) {
       expect(read(join(dir, target, 'music/custom/manifest.json')).trim()).toBe('[]');
     }
   });

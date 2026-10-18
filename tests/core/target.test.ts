@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { inflateRawSync } from 'node:zlib';
-import { describe, expect, test } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 import { GAME_NAME, PRIVACY_URL, ABOUT_URL, SITE_DOMAIN } from '../../src/core/config';
 import { FEATURES, TARGET, debugHookOn, featuresOf, parseTarget } from '../../src/core/target';
 import { OUT_DIRS, targetOfMode } from '../../vite.config';
@@ -20,15 +20,29 @@ describe('build target', () => {
     expect(FEATURES.classicCar).toBe(true);
   });
 
-  test('the three known targets parse, anything else throws', () => {
-    for (const t of ['private', 'site', 'portal'] as const) expect(parseTarget(t)).toBe(t);
+  test('the four known targets parse, anything else throws', () => {
+    for (const t of ['private', 'site', 'portal', 'crazygames'] as const) expect(parseTarget(t)).toBe(t);
     expect(() => parseTarget('production')).toThrow(/unknown build target/);
   });
 
-  test('classic car only in private, stats only in site, new-tab links only in portal', () => {
-    expect(featuresOf('private')).toEqual({ classicCar: true, stats: false, linksInNewTab: false, debugHook: true });
-    expect(featuresOf('site')).toEqual({ classicCar: false, stats: true, linksInNewTab: false, debugHook: false });
-    expect(featuresOf('portal')).toEqual({ classicCar: false, stats: false, linksInNewTab: true, debugHook: false });
+  test('classic car only in private, stats only in site, new-tab links in portal and crazygames', () => {
+    const rest = { fullscreenButton: true, aboutLink: true, share: true, gameplayEvents: false };
+    expect(featuresOf('private')).toEqual({ classicCar: true, stats: false, linksInNewTab: false, debugHook: true, ...rest });
+    expect(featuresOf('site')).toEqual({ classicCar: false, stats: true, linksInNewTab: false, debugHook: false, ...rest });
+    expect(featuresOf('portal')).toEqual({ classicCar: false, stats: false, linksInNewTab: true, debugHook: false, ...rest });
+  });
+
+  test('crazygames starts from portal, without fullscreen button, ABOUT and SHARE, with the gameplay events point', () => {
+    expect(featuresOf('crazygames')).toEqual({
+      classicCar: false,
+      stats: false,
+      linksInNewTab: true,
+      debugHook: false,
+      fullscreenButton: false,
+      aboutLink: false,
+      share: false,
+      gameplayEvents: true,
+    });
   });
 
   test('#debug turns the hook on only in private (and dev); site and portal ignore it', () => {
@@ -39,10 +53,35 @@ describe('build target', () => {
     expect(debugHookOn(featuresOf('portal'), '#debug', '#debug')).toBe(false);
   });
 
+  test('#debug is off in crazygames too', () => {
+    expect(debugHookOn(featuresOf('crazygames'), '#debug', '#debug')).toBe(false);
+  });
+
   test('src/main.ts reads #debug only through debugHookOn', () => {
     const main = readFileSync(root('src/main.ts'), 'utf8');
     expect(main).toMatch(/debugHookOn\(FEATURES, window\.location\.hash, DEBUG_HASH\)/);
     expect(main).not.toMatch(/window\.location\.hash\s*===/);
+  });
+});
+
+describe('build-time constants', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
+  // Le costanti letterali che Vite risolve (e il bundler pota) valgono per
+  // ogni bersaglio quanto i flag di `featuresOf`.
+  test.each(['private', 'site', 'portal', 'crazygames'] as const)('%s: the literal constants agree with featuresOf', async (target) => {
+    vi.stubEnv('VITE_TARGET', target);
+    vi.resetModules();
+    const m = await import('../../src/core/target');
+    expect(m.TARGET).toBe(target);
+    expect(m.STATS_BUILD).toBe(m.FEATURES.stats);
+    expect(m.FULLSCREEN_BUILD).toBe(m.FEATURES.fullscreenButton);
+    expect(m.ABOUT_BUILD).toBe(m.FEATURES.aboutLink);
+    expect(m.SHARE_BUILD).toBe(m.FEATURES.share);
+    expect(m.GAMEPLAY_EVENTS_BUILD).toBe(m.FEATURES.gameplayEvents);
   });
 });
 
@@ -53,14 +92,15 @@ describe('vite modes', () => {
     expect(targetOfMode('production')).toBe('site');
     expect(targetOfMode('site')).toBe('site');
     expect(targetOfMode('portal')).toBe('portal');
+    expect(targetOfMode('crazygames')).toBe('crazygames');
     expect(() => targetOfMode('staging')).toThrow(/unknown Vite mode/);
   });
 
   test('each target has its own output folder', () => {
-    expect(OUT_DIRS).toEqual({ private: 'dist', site: 'dist-site', portal: 'dist-portal' });
+    expect(OUT_DIRS).toEqual({ private: 'dist', site: 'dist-site', portal: 'dist-portal', crazygames: 'dist-crazygames' });
   });
 
-  test('npm run build is build:site, and the three builds have their scripts', () => {
+  test('npm run build is build:site, and the four builds have their scripts', () => {
     const scripts = JSON.parse(readFileSync(root('package.json'), 'utf8')).scripts as Record<string, string>;
     expect(scripts['build']).toBe('npm run build:site');
     expect(scripts['dev']).toBe('vite');
@@ -68,11 +108,15 @@ describe('vite modes', () => {
     expect(scripts['build:site']).toContain('--mode site');
     expect(scripts['build:portal']).toContain('--mode portal');
     expect(scripts['build:portal']).toContain('zip-build.mjs dist-portal dist-portal.zip');
+    expect(scripts['build:crazygames']).toContain('--mode crazygames');
+    expect(scripts['build:crazygames']).toContain('zip-build.mjs dist-crazygames dist-crazygames.zip');
   });
 
   test('build outputs stay out of git', () => {
     const ignore = readFileSync(root('.gitignore'), 'utf8').split('\n');
-    for (const line of ['dist/', 'dist-site/', 'dist-portal/', 'dist-portal.zip']) expect(ignore).toContain(line);
+    for (const line of ['dist/', 'dist-site/', 'dist-portal/', 'dist-portal.zip', 'dist-crazygames/', 'dist-crazygames.zip']) {
+      expect(ignore).toContain(line);
+    }
   });
 });
 

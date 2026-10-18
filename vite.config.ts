@@ -6,8 +6,8 @@ import { GAME_NAME, STATS_ORIGIN } from './src/core/config.ts';
 import type { Target } from './src/core/target.ts';
 
 /**
- * Tre build dallo stesso codice, scelte dal mode di Vite: `private`, `site`,
- * `portal`. `development` (`npm run dev`) vale private, `production` (un
+ * Quattro build dallo stesso codice, scelte dal mode di Vite: `private`,
+ * `site`, `portal`, `crazygames`. `development` (`npm run dev`) vale private, `production` (un
  * `vite build` senza mode) vale site. Un mode ignoto ferma la build.
  */
 export function targetOfMode(mode: string): Target {
@@ -20,8 +20,10 @@ export function targetOfMode(mode: string): Target {
       return 'site';
     case 'portal':
       return 'portal';
+    case 'crazygames':
+      return 'crazygames';
     default:
-      throw new Error(`unknown Vite mode "${mode}": use private, site or portal`);
+      throw new Error(`unknown Vite mode "${mode}": use private, site, portal or crazygames`);
   }
 }
 
@@ -29,13 +31,14 @@ export const OUT_DIRS: Record<Target, string> = {
   private: 'dist',
   site: 'dist-site',
   portal: 'dist-portal',
+  crazygames: 'dist-crazygames',
 };
 
 /**
  * Se il file `rel` di public/ (percorso relativo, con `/`) va nella build di
- * `target`. La privata porta tutto. Site e portal non portano l'auto classica
- * (`player_classic_*`, `ending_classic_*`) né i brani personali di
- * public/music/custom/, che sono dell'utente e non del gioco: di quella
+ * `target`. La privata porta tutto. Le build pubbliche (site, portal,
+ * crazygames) non portano l'auto classica (`player_classic_*`,
+ * `ending_classic_*`) né i brani personali di public/music/custom/, che sono dell'utente e non del gioco: di quella
  * cartella resta solo un manifest vuoto, scritto da `publicForTarget`.
  * `_headers` (Cloudflare Pages) serve solo al sito proprio. Pura.
  */
@@ -90,7 +93,7 @@ export function manifestForTarget(manifest: Record<string, { file?: string }>, t
 }
 
 /**
- * Uno sprite PNG di public/sprites/ che nelle build site e portal arriva come
+ * Uno sprite PNG di public/sprites/ che nelle build pubbliche arriva come
  * WebP (punto 12 del lancio): i PNG restano la sorgente nel repo, nella build
  * c'è solo il .webp. Pura.
  */
@@ -133,7 +136,7 @@ function convertToWebp(src: string, out: string, names: string[]): void {
 }
 
 /**
- * Copia di public/ per site e portal, al posto di quella di Vite: gli stessi
+ * Copia di public/ per le build pubbliche, al posto di quella di Vite: gli stessi
  * file meno quelli che `publicFileAllowed` esclude, gli sprite in WebP invece
  * che in PNG, e un manifest degli sprite che non nomina più i file esclusi
  * (così il gioco non li chiede e non fa un 404) e punta ai WebP.

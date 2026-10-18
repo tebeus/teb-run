@@ -5,9 +5,12 @@
 // appunti. Come il pulsante dello schermo intero (`launchUi.ts`) sta fuori
 // dalla macchina a stati: `navigator.share` vuole il gesto dell'utente
 // dentro l'handler dell'evento, non nel tick della simulazione.
+// Nella build crazygames niente SHARE: scheda e testo portano l'indirizzo
+// del sito, cioè cross-promozione (`SHARE_BUILD`).
 
 import { LOGICAL_H, LOGICAL_W } from '../core/canvas';
 import { GAME_NAME } from '../core/config';
+import { SHARE_BUILD } from '../core/target';
 import { DEFAULT_CAR } from '../game/car';
 import { modeOf } from '../game/mode';
 import type { AssetStore, CarChoice, StageDef } from '../types';
@@ -219,10 +222,15 @@ export interface ShareUi {
   draw(ctx: CanvasRenderingContext2D): void;
 }
 
+/** Nessun pulsante, nessun tasto: la build senza SHARE. */
+export const NO_SHARE_UI: ShareUi = { draw: () => undefined };
+
 /**
  * Collega tasto S e clic/tocco sul pulsante. La scheda si prepara appena una
  * schermata offre un risultato, così al gesto il PNG è già pronto e il
- * foglio di condivisione si apre dentro il gesto dell'utente.
+ * foglio di condivisione si apre dentro il gesto dell'utente. Senza
+ * `SHARE_BUILD` non collega niente: il bundler toglie il resto, scheda e
+ * indirizzo del sito compresi.
  */
 export function installShareUi(
   win: Window,
@@ -233,6 +241,7 @@ export function installShareUi(
   /** A ogni pressione del pulsante (le statistiche della build site). */
   onShare: () => void = () => undefined,
 ): ShareUi {
+  if (!SHARE_BUILD) return NO_SHARE_UI;
   const env: ShareEnv = {
     nav: win.navigator as ShareNavigator,
     doc: win.document,

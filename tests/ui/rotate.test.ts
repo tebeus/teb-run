@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { activatesAudio, installAudioUnlock } from '../../src/core/audioUnlock';
+import { UNLOCK_EVENTS, installAudioUnlock } from '../../src/core/audioUnlock';
 import { computeLetterbox, computeSafeLetterbox } from '../../src/core/canvas';
 import type { InputDevice } from '../../src/core/device';
 import { createRotateGuard, guardSignals, wantsRotate } from '../../src/ui/rotate';
@@ -75,24 +75,18 @@ describe('safe area', () => {
 });
 
 describe('sblocco audio', () => {
-  test('il pointerdown di un dito non attiva la pagina, il rilascio sì', () => {
-    expect(activatesAudio({ type: 'pointerdown', pointerType: 'touch' })).toBe(false);
-    expect(activatesAudio({ type: 'pointerdown', pointerType: 'mouse' })).toBe(true);
-    expect(activatesAudio({ type: 'touchend' })).toBe(true);
-    expect(activatesAudio({ type: 'pointerup', pointerType: 'touch' })).toBe(true);
-    expect(activatesAudio({ type: 'keydown' })).toBe(true);
-  });
-
-  test('si prova a ogni gesto finché uno attiva, poi basta', () => {
+  test('a ogni gesto, anche dopo il primo che attiva: iOS sospende il contesto (chiamata, background) e solo un gesto lo riprende', () => {
     const win = new EventTarget();
-    let calls = 0;
-    installAudioUnlock(win, () => calls++);
-    win.dispatchEvent(Object.assign(new Event('pointerdown'), { pointerType: 'touch' }));
-    expect(calls).toBe(1);
-    win.dispatchEvent(new Event('touchend'));
-    expect(calls).toBe(2);
+    const seen: string[] = [];
+    installAudioUnlock(win, () => seen.push('unlock'));
+    for (const name of UNLOCK_EVENTS) win.dispatchEvent(new Event(name));
     win.dispatchEvent(new Event('touchend'));
     win.dispatchEvent(new Event('keydown'));
-    expect(calls).toBe(2);
+    expect(seen).toHaveLength(UNLOCK_EVENTS.length + 2);
+  });
+
+  test('i gesti sono tasto, clic e il rilascio del dito, non solo la visibilità', () => {
+    for (const name of ['touchend', 'click', 'pointerup', 'keydown']) expect(UNLOCK_EVENTS).toContain(name);
+    expect(UNLOCK_EVENTS).not.toContain('visibilitychange');
   });
 });
