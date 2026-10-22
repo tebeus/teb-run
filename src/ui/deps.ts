@@ -67,4 +67,11 @@ export interface ScreenDeps {
   device?: () => InputDevice;
   /** Lo sterzo con inclinazione è acceso? Il suggerimento della gara lo dice. Assente vale spento. */
   tiltOn?: () => boolean;
+  /**
+   * L'input va ignorato adesso (la pubblicità fra due partite, build
+   * crazygames)? Anche M: `app.ts` non lo guarda. Assente vale no.
+   */
+  inputLocked?: () => boolean;
+  /** La finestra del permesso dei sensori è aperta? Il timer della radio intanto si ferma. Assente vale no. */
+  tiltAsking?: () => boolean;
 }

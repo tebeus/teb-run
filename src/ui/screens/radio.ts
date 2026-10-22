@@ -9,8 +9,10 @@ import { go, type Screen, type ScreenPayloads, type Transition } from '../fsm';
 import { drawTextOutlined } from '../text';
 import { drawRadioControls, DRIVE_LINE_TOUCH_TILT, DRIVE_LINES, radioChangeLine, radioMenuLine } from '../controlsHelp';
 import {
+  RADIO_BACK_RECT,
   RADIO_CAR_RECT,
   RADIO_MODE_RECT,
+  RADIO_TILT_RECT,
   RADIO_TOUCH_ARROW_DOWN_Y,
   RADIO_TOUCH_ARROW_UP_Y,
   RADIO_TOUCH_CONTROLS_Y,
@@ -23,7 +25,10 @@ import {
   RADIO_TOUCH_TITLE_Y,
 } from '../radioTouch';
 import { measureText } from '../text';
-import type { Rect } from '../rect';
+import { inside, type Rect } from '../rect';
+import { touchLayout } from '../touch';
+import type { InputDevice } from '../../core/device';
+import { RADIO_TIMER_BUILD } from '../../core/target';
 
 /**
  * I titoli mostrati vengono da `audio/songs`, in maiuscolo perché il font
@@ -184,6 +189,86 @@ export function stepRadio(
 }
 
 /**
+ * Timer della radio (solo build crazygames, `RADIO_TIMER_BUILD`), come nei
+ * cabinati: dieci secondi a vista, e allo zero si parte con il brano, l'auto
+ * e la modalità scelti. Un input **non** lo azzera: chi sceglie con calma ha
+ * comunque dieci secondi, e chi non capisce i comandi (quello che il Basic
+ * Launch perdeva) arriva in gara lo stesso. Si ferma solo mentre iOS mostra
+ * la finestra del permesso dei sensori.
+ */
+export const RADIO_TIMER_SECONDS = 10;
+
+/** I secondi da scrivere dopo `t` secondi di radio: 10, 9, ... 1, poi 0. Pura. */
+export function radioTimerShown(t: number): number {
+  return Math.max(0, Math.ceil(RADIO_TIMER_SECONDS - t - 1e-9));
+}
+
+/** Il timer è arrivato a zero? Pura. */
+export function radioTimerExpired(t: number): boolean {
+  return t + 1e-9 >= RADIO_TIMER_SECONDS;
+}
+
+/**
+ * Il timer, sopra a destra (su computer: fuori dalle righe dei comandi, che
+ * finiscono a x 1144) o, col tocco, fra BACK e il titolo (TILT occupa
+ * l'angolo a destra). Rosso negli ultimi tre secondi.
+ */
+export function drawRadioTimer(ctx: CanvasRenderingContext2D, t: number, touch: boolean): void {
+  const n = radioTimerShown(t);
+  const colour = n <= 3 ? '#ff5a4a' : '#ffee55';
+  if (touch) {
+    const cx = (RADIO_BACK_RECT.x + RADIO_BACK_RECT.w + LOGICAL_W / 2 - measureText('SELECT YOUR RADIO', 4) / 2) / 2;
+    drawTextOutlined(ctx, 'TIME', cx, RADIO_BACK_RECT.y + 4, 2, '#ffffff', 'center');
+    drawTextOutlined(ctx, String(n), cx, RADIO_BACK_RECT.y + 28, 6, colour, 'center');
+  } else {
+    const right = RADIO_TILT_RECT.x + RADIO_TILT_RECT.w - 6;
+    drawTextOutlined(ctx, 'TIME', right, 14, 2, '#ffffff', 'right');
+    drawTextOutlined(ctx, String(n), right, 38, 6, colour, 'right');
+  }
+}
+
+/** Cosa c'è sotto un clic del mouse sulla radio. */
+export type RadioClick =
+  | { kind: 'song'; index: number }
+  | { kind: 'car' }
+  | { kind: 'mode' }
+  | { kind: 'back' }
+  | { kind: 'none' }
+  | { kind: 'start' };
+
+/**
+ * Il bersaglio di un clic del mouse sulla radio: un brano lo sceglie e basta
+ * (non parte), l'auto e la modalità cambiano, le frecce scorrono l'elenco;
+ * altrove, la partenza. Con lo schema del telefono (un portatile touch che
+ * ha appena usato le dita) valgono anche i suoi pulsanti. Pura.
+ */
+export function radioClickTarget(device: InputDevice, selected: number, count: number, p: { x: number; y: number }): RadioClick {
+  const look = device === 'touch' ? TOUCH_LOOK : DESK_LOOK;
+  const total = Math.max(1, count);
+  if (inside(RADIO_CAR_RECT, p.x, p.y)) return { kind: 'car' };
+  if (inside(RADIO_MODE_RECT, p.x, p.y)) return { kind: 'mode' };
+  if (look.touch) {
+    const b = touchLayout('radio', { tiltAvailable: true, tiltOn: false, cssPerLogical: 1 }).find((x) => inside(x.rect, p.x, p.y));
+    if (b?.id === 'back') return { kind: 'back' };
+    if (b?.id === 'tilt') return { kind: 'none' };
+    if (b?.id === 'prev') return { kind: 'song', index: (selected + total - 1) % total };
+    if (b?.id === 'next') return { kind: 'song', index: (selected + 1) % total };
+    if (b?.id === 'start') return { kind: 'start' };
+  }
+  const { from, to } = visibleWindow(selected, total, look.rows);
+  const half = look.cursorX + 10;
+  for (let i = from; i < to; i++) {
+    const rowY = look.listY + (i - from) * look.rowStep;
+    const row: Rect = { x: LOGICAL_W / 2 - half, y: rowY - (look.rowStep - 16) / 2, w: 2 * half, h: look.rowStep };
+    if (inside(row, p.x, p.y)) return { kind: 'song', index: i };
+  }
+  const arrow = (y: number): Rect => ({ x: LOGICAL_W / 2 - 40, y: y - 8, w: 80, h: 32 });
+  if (from > 0 && inside(arrow(look.arrowUpY), p.x, p.y)) return { kind: 'song', index: from - 1 };
+  if (to < total && inside(arrow(look.arrowDownY), p.x, p.y)) return { kind: 'song', index: to };
+  return { kind: 'start' };
+}
+
+/**
  * Dove stanno le cose sulla radio: lo schema di sempre, o quello del
  * telefono (`radioTouch.ts`), con testi a scala 3, tre righe e fasce scure
  * dietro, perché a 375 px CSS di altezza la scala 2 non si legge.
@@ -254,6 +339,8 @@ function buttonFrame(ctx: CanvasRenderingContext2D, r: Rect): void {
 
 export function createRadioScreen(deps: ScreenDeps): Screen {
   let state = initialRadioState();
+  /** Secondi di timer passati (solo build crazygames). */
+  let timerT = 0;
 
   /**
    * Titoli mostrati: i tre sintetici più i personali (spec §11).
@@ -270,16 +357,39 @@ export function createRadioScreen(deps: ScreenDeps): Screen {
     enter(payload) {
       parseRadioPayload(payload);
       state = initialRadioState();
+      timerT = 0;
       deps.audio.playSong(state.selected);
     },
     update(dt, actions) {
+      // Il clic del mouse: un brano si sceglie, l'auto e la modalità cambiano
+      // come con C e D, altrove si parte (come ENTER).
+      if (actions.click) {
+        const hit = radioClickTarget(deps.device?.() ?? 'keyboard', state.selected, titles().length, actions.click);
+        if (hit.kind === 'song' && hit.index !== state.selected) {
+          state = { ...state, selected: hit.index };
+          deps.audio.playSong(state.selected);
+        } else if (hit.kind === 'car') {
+          actions = { ...actions, gearToggle: true };
+        } else if (hit.kind === 'mode') {
+          actions = { ...actions, modeToggle: true };
+        } else if (hit.kind === 'back') {
+          actions = { ...actions, back: true };
+        } else if (hit.kind === 'start') {
+          actions = { ...actions, confirm: true };
+        }
+      }
+      if (deps.mode !== undefined && wantsModeToggle(actions)) deps.mode.toggle();
       if (deps.car !== undefined && wantsCarToggle(actions)) {
         deps.car.toggle();
         // Caricamento a fasi: i frame dell'auto appena scelta passano in
         // testa al background, così di solito ci sono già alla partenza.
         stagedOf(deps.assets)?.requestStage({ id: deps.firstStage.id, theme: deps.firstStage.theme }, deps.car.get());
       }
-      if (deps.mode !== undefined && wantsModeToggle(actions)) deps.mode.toggle();
+      if (RADIO_TIMER_BUILD) {
+        if (deps.tiltAsking?.() !== true) timerT += dt;
+        // Allo zero si parte, come con ENTER.
+        if (radioTimerExpired(timerT)) actions = { ...actions, confirm: true };
+      }
       const r = stepRadio(state, actions, titles().length);
       state = r.state;
       if (r.songChanged) deps.audio.playSong(state.selected);
@@ -399,6 +509,8 @@ export function createRadioScreen(deps: ScreenDeps): Screen {
           drawTextOutlined(ctx, radioChangeLine(device, 'D'), RADIO_MODE_X, RADIO_CAR_HINT_Y, 1, '#e8e8e8', 'center');
         }
       }
+
+      if (RADIO_TIMER_BUILD) drawRadioTimer(ctx, timerT, look.touch);
 
       // Pannello dell'autoradio, largo 1000 px centrato in basso (spec §11).
       const panelX = (LOGICAL_W - PANEL_W) / 2;

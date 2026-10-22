@@ -27,18 +27,29 @@ export function radioControlLines(device: InputDevice): string[] {
   return [DRIVE_LINES.keyboard, DRIVE_LINES.pad];
 }
 
-/** La riga della radio sotto l'elenco, per scegliere il brano e partire. Pura. */
+/**
+ * La riga della radio sotto l'elenco, per scegliere il brano e partire.
+ * Su computer dice anche il mouse: un clic su un brano lo sceglie (non
+ * parte), un clic fuori dall'elenco parte. Pura.
+ */
 export function radioMenuLine(device: InputDevice): string {
   if (device === 'touch') return 'TAP < > TO CHOOSE, START TO GO';
   if (device === 'pad') return 'LEFT RIGHT TO CHOOSE, A TO START';
-  return 'LEFT RIGHT TO CHOOSE, ENTER TO START';
+  return 'LEFT RIGHT OR CLICK A SONG, ENTER OR CLICK OUTSIDE TO START';
 }
 
-/** La scritta sotto l'auto e sotto la modalità, sulla radio. Pura. */
+/** La scritta sotto l'auto e sotto la modalità, sulla radio: su computer anche col clic. Pura. */
 export function radioChangeLine(device: InputDevice, key: 'C' | 'D'): string {
   if (device === 'touch') return 'TAP TO CHANGE';
   if (device === 'pad') return key === 'C' ? 'Y TO CHANGE' : 'D KEY TO CHANGE';
-  return `${key} TO CHANGE`;
+  return `${key} OR CLICK TO CHANGE`;
+}
+
+/** La scritta che lampeggia sul titolo: su computer il clic vale quanto ENTER. Pura. */
+export function titleStartLine(device: InputDevice): string {
+  if (device === 'touch') return 'TAP TO START';
+  if (device === 'pad') return 'PRESS A TO START';
+  return 'CLICK OR PRESS ENTER';
 }
 
 /** Quota delle righe dei comandi della radio, sopra il titolo (che sta a 78). */
@@ -90,5 +101,42 @@ export function drawRaceHint(ctx: CanvasRenderingContext2D, device: InputDevice,
   ctx.globalAlpha = alpha;
   drawTextOutlined(ctx, lines[0], LOGICAL_W / 2, RACE_HINT_Y, 2, '#ffffff', 'center');
   drawTextOutlined(ctx, lines[1], LOGICAL_W / 2, RACE_HINT_Y + 26, 2, '#ffee55', 'center');
+  ctx.globalAlpha = before;
+}
+
+/**
+ * La riga dell'obiettivo (solo build crazygames, `GOAL_LINE_BUILD`): alla
+ * prima gara della sessione, per chi non sa cosa deve fare. Compare quando
+ * il semaforo e la scritta READY/GO se ne sono andati (prima occuperebbe il
+ * loro posto: READY scende fino a y 263 sotto la scatola vera).
+ */
+export const GOAL_LINE = 'REACH THE CHECKPOINT BEFORE TIME RUNS OUT';
+/** Quanti secondi di corsa resta, dopo il semaforo. Sparisce prima al primo checkpoint. */
+export const GOAL_LINE_SECONDS = 6;
+/**
+ * Quota della riga: dove stava il semaforo, nel cielo, sotto la riga in alto
+ * dell'HUD (fino a y 82) e lontana dalla strada, dal suggerimento dei
+ * comandi (da y 392) e dai banner centrali (da y 300). Il banner del bivio
+ * (y 130) arriva solo alla fine della tappa, quando la riga non c'è più.
+ */
+export const GOAL_LINE_Y = 132;
+export const GOAL_LINE_SCALE = 3;
+
+/** Opacità della riga dopo `t` secondi di gara: entra in 0,3 s, esce nell'ultimo secondo. Pura. */
+export function goalLineAlpha(t: number): number {
+  if (!(t >= 0) || t >= GOAL_LINE_SECONDS) return 0;
+  return Math.min(1, t / RACE_HINT_FADE_IN, GOAL_LINE_SECONDS - t);
+}
+
+/** La riga, gialla su una fascia scura, a opacità `alpha`. */
+export function drawGoalLine(ctx: CanvasRenderingContext2D, alpha: number): void {
+  if (!(alpha > 0)) return;
+  const w = measureText(GOAL_LINE, GOAL_LINE_SCALE) + 32;
+  const before = ctx.globalAlpha;
+  ctx.globalAlpha = alpha * 0.6;
+  ctx.fillStyle = '#101018';
+  ctx.fillRect(LOGICAL_W / 2 - w / 2, GOAL_LINE_Y - 8, w, 8 * GOAL_LINE_SCALE + 16);
+  ctx.globalAlpha = alpha;
+  drawTextOutlined(ctx, GOAL_LINE, LOGICAL_W / 2, GOAL_LINE_Y, GOAL_LINE_SCALE, '#ffee55', 'center');
   ctx.globalAlpha = before;
 }

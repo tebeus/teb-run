@@ -36,7 +36,8 @@ describe('touchLayout', () => {
   test('ogni schermata è usabile col tocco, con pulsanti dentro lo schermo e non sovrapposti', () => {
     for (const screen of SCREENS) {
       const buttons = touchLayout(screen, OPTS);
-      expect(buttons.length, screen).toBeGreaterThan(0);
+      // Fine partita: RETRY, MENU e CONTINUE li disegnano e li toccano le schermate (retryMenu.ts).
+      if (screen !== 'gameOver' && screen !== 'ending') expect(buttons.length, screen).toBeGreaterThan(0);
       const drawn = buttons.filter((b) => !b.hidden);
       for (const b of buttons) {
         expect(b.rect.x).toBeGreaterThanOrEqual(0);

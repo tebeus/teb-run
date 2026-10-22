@@ -26,7 +26,7 @@ describe('build target', () => {
   });
 
   test('classic car only in private, stats only in site, new-tab links in portal and crazygames', () => {
-    const rest = { fullscreenButton: true, aboutLink: true, share: true, gameplayEvents: false };
+    const rest = { fullscreenButton: true, aboutLink: true, share: true, portalSdk: false, radioTimer: false, goalLine: false };
     expect(featuresOf('private')).toEqual({ classicCar: true, stats: false, linksInNewTab: false, debugHook: true, ...rest });
     expect(featuresOf('site')).toEqual({ classicCar: false, stats: true, linksInNewTab: false, debugHook: false, ...rest });
     expect(featuresOf('portal')).toEqual({ classicCar: false, stats: false, linksInNewTab: true, debugHook: false, ...rest });
@@ -41,7 +41,9 @@ describe('build target', () => {
       fullscreenButton: false,
       aboutLink: false,
       share: false,
-      gameplayEvents: true,
+      portalSdk: true,
+      radioTimer: true,
+      goalLine: true,
     });
   });
 
@@ -81,7 +83,9 @@ describe('build-time constants', () => {
     expect(m.FULLSCREEN_BUILD).toBe(m.FEATURES.fullscreenButton);
     expect(m.ABOUT_BUILD).toBe(m.FEATURES.aboutLink);
     expect(m.SHARE_BUILD).toBe(m.FEATURES.share);
-    expect(m.GAMEPLAY_EVENTS_BUILD).toBe(m.FEATURES.gameplayEvents);
+    expect(m.SDK_BUILD).toBe(m.FEATURES.portalSdk);
+    expect(m.RADIO_TIMER_BUILD).toBe(m.FEATURES.radioTimer);
+    expect(m.GOAL_LINE_BUILD).toBe(m.FEATURES.goalLine);
   });
 });
 

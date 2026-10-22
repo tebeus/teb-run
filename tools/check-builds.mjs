@@ -18,7 +18,11 @@
 // - nella crazygames: tebrun.io fuori dall'indirizzo della privacy,
 //   itch.io, GitHub, GoatCounter, requestFullscreen, l'indirizzo ABOUT o
 //   SHARE (requisiti di CrazyGames: niente cross-promozione, niente
-//   pulsante dello schermo intero).
+//   pulsante dello schermo intero), pubblicità con premio o banner, e
+//   un'origine esterna diversa da quella dell'SDK di CrazyGames (che deve
+//   esserci);
+// - nella site e nella portal: qualunque traccia dell'SDK di CrazyGames o
+//   delle sue pubblicità.
 // Lo richiamano gli e2e (e2e/subfolder.spec.ts) e tests/wiring/builds.test.ts.
 //
 //   node tools/check-builds.mjs              costruisce in una cartella temporanea e la cancella
@@ -149,7 +153,11 @@ export function checkBuild(dir, forbidden = forbiddenStrings(), target = null) {
     const bytes = readFileSync(join(dir, file));
     const text = bytes.toString('latin1');
     if (target !== null && target !== 'site' && text.includes(STATS_HOST)) out.push(`${file} names ${STATS_HOST} in the ${target} build`);
-    if (target === 'crazygames' && /\.(js|css|html|json)$/.test(file)) out.push(...crazyGamesProblems(text).map((p) => `${file}: ${p}`));
+    if (target === 'crazygames' && /\.(js|css|html|json)$/.test(file)) {
+      out.push(...crazyGamesProblems(text).map((p) => `${file}: ${p}`));
+      out.push(...outsideOrigins(text).map((o) => `${file}: outside origin ${o}`));
+    }
+    if (target !== null && target !== 'crazygames' && /\.(js|css|html|json)$/.test(file)) out.push(...sdkProblems(text).map((p) => `${file}: ${p}`));
     for (const needle of forbidden) {
       if (text.includes(needle)) out.push(`${file} contains ${needle.includes('@') ? 'the git email' : needle}`);
     }
@@ -162,6 +170,9 @@ export function checkBuild(dir, forbidden = forbiddenStrings(), target = null) {
     }
   } catch (reason) {
     out.push(`sprites/manifest.json unreadable: ${String(reason)}`);
+  }
+  if (target === 'crazygames' && !files.some((f) => /\.js$/.test(f) && readFileSync(join(dir, f), 'latin1').includes(`${SDK_ORIGIN}/`))) {
+    out.push('no CrazyGames SDK in the crazygames build');
   }
   if (target !== null) out.push(...weightProblems(buildWeights(dir)));
   return out;
@@ -181,7 +192,32 @@ export const CRAZYGAMES_FORBIDDEN = [
   new URL(ABOUT_URL).pathname,
   `play.${SITE_DOMAIN}`,
   'SHARE NOT AVAILABLE',
+  // Niente pubblicità con premio né banner (un "continua" pagato cambierebbe il gioco).
+  'rewarded',
+  'requestBanner',
 ];
+
+/** L'origine dell'SDK di CrazyGames (src/core/crazySdk.ts): l'unica esterna della build crazygames. */
+export const SDK_ORIGIN = 'https://sdk.crazygames.com';
+
+/** Le tracce dell'SDK e delle pubblicità, che site e portal non devono avere. */
+export const SDK_MARKERS = ['sdk.crazygames.com', 'crazygames-sdk', 'requestAd', 'midgame', 'happytime', 'gameplayStart', 'loadingStart', 'CrazyGames'];
+
+/** Problemi di un file di testo di una build che non è la crazygames: tracce dell'SDK. Pura. */
+export function sdkProblems(text) {
+  return SDK_MARKERS.filter((m) => text.includes(m)).map((m) => `names ${m} (the CrazyGames SDK)`);
+}
+
+/**
+ * Le origini esterne di un file di testo della build crazygames diverse da
+ * quella dell'SDK. L'indirizzo della privacy il bundle lo compone da una
+ * stringa nuda del dominio (`https://${s}`), che qui non è un'origine; lo
+ * controlla `crazyGamesProblems`. Pura.
+ */
+export function outsideOrigins(text) {
+  const origins = [...text.matchAll(/https?:\/\/[a-z0-9-]+(?:\.[a-z0-9-]+)+/gi)].map((m) => m[0].toLowerCase());
+  return [...new Set(origins)].filter((o) => o !== SDK_ORIGIN && o !== `https://${SITE_DOMAIN}`);
+}
 
 /**
  * Problemi di un file di testo della build crazygames. Il dominio del sito

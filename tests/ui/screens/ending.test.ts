@@ -39,9 +39,12 @@ describe('stepEnding', () => {
     expect(r.transition).toEqual(go('nameEntry', { score: 900, stageId: '4-1', route: ['L', 'R'] }));
   });
 
-  test('confirm before the duration routes to scores when not qualifying', () => {
+  test('confirm before the duration is RETRY when not qualifying, with the same song', () => {
     const r = stepEnding(state(false, 1), 1 / 60, { ...emptyActions(), confirm: true });
-    expect(r.transition).toEqual(go('scores', undefined));
+    expect(r.transition).toEqual(go('race', { song: 0 }));
+    const withSong: EndingState = { ...state(false, 1), payload: { ...state(false).payload, song: 1 } };
+    expect(stepEnding(withSong, 1 / 60, { ...emptyActions(), back: true }).transition).toEqual(go('title', undefined));
+    expect(stepEnding(withSong, 1 / 60, { ...emptyActions(), confirm: true }).transition).toEqual(go('race', { song: 1 }));
   });
 
   test('reaching the duration transitions automatically, even without confirm', () => {

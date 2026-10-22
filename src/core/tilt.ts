@@ -36,6 +36,8 @@ export interface TiltControl {
    * il pulsante dice già TILT ON, e il permesso si chiede al primo gesto.
    */
   readonly pending: boolean;
+  /** La finestra del permesso di iOS è aperta adesso? (Il timer della radio aspetta.) */
+  readonly asking?: boolean;
   /**
    * Quante volte il permesso dei sensori è stato negato o è fallito: chi
    * mostra i comandi lo dice a schermo invece di spegnersi in silenzio.
@@ -158,6 +160,9 @@ export function createTilt(win: Window, memory?: TiltMemory): TiltControl {
     },
     get pending() {
       return pending;
+    },
+    get asking() {
+      return asking;
     },
     get refusals() {
       return refusals;

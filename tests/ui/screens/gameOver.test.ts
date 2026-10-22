@@ -43,19 +43,20 @@ describe('stepGameOver', () => {
     expect(r.transition).toBeNull();
   });
 
-  test('confirm routes to nameEntry when qualifying, to scores otherwise', () => {
+  test('confirm routes to nameEntry when qualifying, to a RETRY with the same song otherwise', () => {
     expect(stepGameOver(state(true, 1), 1 / 60, { ...emptyActions(), confirm: true }).transition).toEqual(
       go('nameEntry', { score: 300, stageId: '2-1', route: ['L'] }),
     );
-    expect(stepGameOver(state(false, 1), 1 / 60, { ...emptyActions(), confirm: true }).transition).toEqual(
-      go('scores', undefined),
-    );
+    expect(stepGameOver(state(false, 1), 1 / 60, { ...emptyActions(), confirm: true }).transition).toEqual(go('race', { song: 0 }));
+    const withSong: GameOverState = { ...state(false, 1), payload: { ...state(false).payload, song: 2 } };
+    expect(stepGameOver(withSong, 1 / 60, { ...emptyActions(), confirm: true }).transition).toEqual(go('race', { song: 2 }));
   });
 
-  test('reaching the duration transitions automatically', () => {
-    let s = state(false, GAME_OVER_DURATION_S - 0.5);
-    const r = stepGameOver(s, 1, emptyActions());
-    expect(r.transition).toEqual(go('scores', undefined));
+  test('reaching the duration goes to the initials when qualifying; without a record the RETRY waits', () => {
+    expect(stepGameOver(state(true, GAME_OVER_DURATION_S - 0.5), 1, emptyActions()).transition).toEqual(
+      go('nameEntry', { score: 300, stageId: '2-1', route: ['L'] }),
+    );
+    expect(stepGameOver(state(false, GAME_OVER_DURATION_S - 0.5), 60, emptyActions()).transition).toBeNull();
   });
 });
 
@@ -154,7 +155,8 @@ describe('schermata di game over a tutto schermo', () => {
   test('the route map takes at least 70% of the width and stays on screen', () => {
     const { map } = gameOverLayout(far);
     expect(map.w).toBeGreaterThanOrEqual(0.7 * LOGICAL_W);
-    expect(map.h).toBeGreaterThanOrEqual(0.6 * LOGICAL_H);
+    // Sotto c'è la fila di RETRY e MENU: la mappa resta alta più di metà schermo.
+    expect(map.h).toBeGreaterThanOrEqual(0.55 * LOGICAL_H);
     expect(inside(map)).toBe(true);
   });
 

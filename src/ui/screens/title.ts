@@ -10,6 +10,7 @@ import type { ScreenDeps } from '../deps';
 import { go, type Screen, type ScreenPayloads, type Transition } from '../fsm';
 import { drawText, drawTextOutlined } from '../text';
 import { engineParams } from './race';
+import { titleStartLine } from '../controlsHelp';
 
 /**
  * Ciclo attrattivo (spec §11): tre fasi da `ATTRACT_PHASE_S` secondi che
@@ -80,7 +81,8 @@ function anyActionHeld(a: Actions): boolean {
 }
 
 /**
- * Riduttore puro del titolo: ENTER porta subito alla radio; senza input per
+ * Riduttore puro del titolo: ENTER, o un clic del mouse (i clic sui link non
+ * arrivano qui: `ui/mouse.ts`), porta subito alla radio; senza input per
  * ATTRACT_CYCLE_S secondi (le tre fasi del ciclo attrattivo), passa alla
  * classifica.
  */
@@ -89,7 +91,7 @@ export function stepTitle(
   dt: number,
   actions: Actions,
 ): { state: TitleState; transition: Transition | null } {
-  if (actions.confirm) {
+  if (actions.confirm || actions.click) {
     return { state, transition: go('radio', undefined) };
   }
 
@@ -247,7 +249,7 @@ export function createTitleScreen(deps: ScreenDeps): Screen {
         // basso, livello 0, sta a cy ≈ 648 su LOGICAL_H = 720): più in
         // basso, fuori dal triangolo dei quindici nodi.
         const y = phase === 'map' ? PRESS_ENTER_MAP_Y : PRESS_ENTER_Y;
-        drawTextOutlined(ctx, deps.device?.() === 'touch' ? 'TAP TO START' : 'PRESS ENTER', LOGICAL_W / 2, y, 3, '#ffffff', 'center');
+        drawTextOutlined(ctx, titleStartLine(deps.device?.() ?? 'keyboard'), LOGICAL_W / 2, y, 3, '#ffffff', 'center');
       }
     },
     exit() {

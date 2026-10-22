@@ -33,6 +33,9 @@ export function masterGainValue(muted: boolean, level: number = MASTER_LEVEL): n
   return muted ? 0 : level;
 }
 
+/** Chi, oltre a M, può zittire il gioco: la pubblicità e l'impostazione del portale. */
+export type HostMuteReason = 'ad' | 'portal';
+
 export interface AudioHost {
   /** null finché unlock() non riesce, o per sempre se l'audio non è disponibile. */
   readonly ctx: AudioContext | null;
@@ -48,6 +51,12 @@ export interface AudioHost {
   unlock(): void;
   /** Ritorna true se ora è muto. */
   toggleMute(): boolean;
+  /**
+   * Muto chiesto da fuori (`reason`: la pubblicità del portale, o la sua
+   * impostazione `muteAudio`), indipendente da M: si sente solo se né M né
+   * nessuna ragione accesa dicono muto. `muted` resta quello di M.
+   */
+  setHostMute(reason: HostMuteReason, on: boolean): void;
   /** Chiama `callback` una volta sola, appena il contesto gira (subito se già gira). */
   whenRunning(callback: () => void): void;
 }
@@ -60,6 +69,9 @@ export function createAudioHost(
   let ctx: AudioContext | null = null;
   let master: GainNode | null = null;
   let muted = false;
+  /** Le ragioni di muto da fuori accese adesso (vedi `setHostMute`). */
+  const hostMuted = new Set<HostMuteReason>();
+  const silent = (): boolean => muted || hostMuted.size > 0;
   // resume() rifiutato: audio non disponibile finché non arriva un altro gesto.
   let resumeDenied = false;
   const waiting: (() => void)[] = [];
@@ -84,7 +96,7 @@ export function createAudioHost(
     const param = master.gain;
     param.cancelScheduledValues(now);
     param.setValueAtTime(param.value, now);
-    param.linearRampToValueAtTime(masterGainValue(muted, level), now + MUTE_FADE);
+    param.linearRampToValueAtTime(masterGainValue(silent(), level), now + MUTE_FADE);
   }
 
   /** Da chiamare dentro il gestore di un gesto utente. Idempotente. */
@@ -96,7 +108,7 @@ export function createAudioHost(
       try {
         ctx = new ctor();
         master = ctx.createGain();
-        master.gain.value = masterGainValue(muted, level);
+        master.gain.value = masterGainValue(silent(), level);
         master.connect(ctx.destination);
         ctx.onstatechange = (): void => notify();
       } catch {
@@ -139,6 +151,12 @@ export function createAudioHost(
       muted = !muted;
       applyGain();
       return muted;
+    },
+    setHostMute(reason, on) {
+      if (on === hostMuted.has(reason)) return;
+      if (on) hostMuted.add(reason);
+      else hostMuted.delete(reason);
+      applyGain();
     },
     whenRunning(callback: () => void): void {
       if (ctor === null) return;

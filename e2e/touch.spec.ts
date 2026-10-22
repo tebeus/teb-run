@@ -8,6 +8,7 @@
 import { devices, expect, test, type CDPSession, type Page } from '@playwright/test';
 import { pauseButtons } from '../src/ui/pause';
 import { touchLayout } from '../src/ui/touch';
+import { CONTINUE_RECT, RETRY_INPUT_DELAY_S, RETRY_RECT } from '../src/ui/retryMenu';
 import type { ScreenName } from '../src/ui/fsm';
 
 const screenName = (page: Page): Promise<string | undefined> => page.evaluate(() => window.__tebrun?.app.name);
@@ -122,24 +123,31 @@ for (const phone of PHONES) {
       expect(await screenName(page)).toBe('race');
     });
 
-    test('una partita fino al game over col solo tocco', async ({ page }) => {
+    test('una partita fino al game over col solo tocco, e RETRY', async ({ page }) => {
       await toRaceByTouch(page, 4);
       await touches(page, 'touchStart', [button('race', 'gas')]);
       await expect.poll(() => screenName(page), { timeout: 30_000 }).toBe('gameOver');
       await touches(page, 'touchEnd', []);
       await page.waitForTimeout(500);
       await page.screenshot({ path: `e2e/out/launch-w3a-gameover-${slug}.png` });
-      await tap(page, button('gameOver', 'continue'));
+      // Un punto dentro sia RETRY sia CONTINUE: con un record si va alle
+      // iniziali, senza si riparte. Oltre il mezzo secondo di guardia.
+      await page.waitForTimeout(RETRY_INPUT_DELAY_S * 1000);
+      const endButton = { x: (CONTINUE_RECT.x + RETRY_RECT.x + RETRY_RECT.w) / 2, y: RETRY_RECT.y + RETRY_RECT.h / 2 };
+      await tap(page, endButton);
       await expect.poll(() => screenName(page)).not.toBe('gameOver');
       if ((await screenName(page)) === 'nameEntry') {
         for (let i = 0; i < 3; i++) {
           await tap(page, button('nameEntry', 'next'));
           await page.waitForTimeout(150);
         }
+        // Dopo le iniziali, RETRY sulla TOP 10.
+        await expect.poll(() => screenName(page)).toBe('scores');
+        await page.waitForTimeout(RETRY_INPUT_DELAY_S * 1000 + 100);
+        await page.screenshot({ path: `e2e/out/retry-scores-${slug}.png` });
+        await tap(page, { x: RETRY_RECT.x + RETRY_RECT.w / 2, y: RETRY_RECT.y + RETRY_RECT.h / 2 });
       }
-      await expect.poll(() => screenName(page)).toBe('scores');
-      await tap(page, { x: 640, y: 360 });
-      await expect.poll(() => screenName(page)).toBe('title');
+      await expect.poll(() => screenName(page)).toBe('race');
     });
 
     test('in verticale: ruota il telefono, e la gara va in pausa', async ({ page }) => {
@@ -365,7 +373,38 @@ test.describe('tocco, schermi quasi quadrati', () => {
 });
 
 test.describe('desktop senza touch', () => {
-  test('il dispositivo resta la tastiera, il mouse non guida, i comandi a schermo ci sono', async ({ page }) => {
+  test('solo mouse: titolo, radio (brano, auto), gara, game over, RETRY con la stessa auto, lo stesso brano e la stessa modalità', async ({ page }) => {
+    // Una TOP 10 piena di record irraggiungibili: il game over offre RETRY.
+    await page.addInitScript(() => {
+      const top = Array.from({ length: 10 }, () => ({ name: 'CPU', score: 9_999_999, stageId: '4-4', route: 'L L L L', date: '2026-10-21T00:00:00.000Z' }));
+      localStorage.setItem('tebrun.scores.normal.v1', JSON.stringify(top));
+    });
+    await page.goto('/#debug');
+    await page.waitForFunction(() => window.__tebrun?.app.name === 'title');
+    await page.evaluate(() => window.__tebrun?.setStartTimeLimit(2));
+    await page.mouse.click(640, 300);
+    await expect.poll(() => screenName(page)).toBe('radio');
+    await page.waitForTimeout(700);
+    const car0 = await page.evaluate(() => window.__tebrun!.car());
+    await page.mouse.click(160, 200); // l'auto
+    await page.mouse.click(640, 130 + 2 * 32 + 8); // il terzo brano: scelto, non parte
+    await page.waitForTimeout(300);
+    expect(await screenName(page)).toBe('radio');
+    const car = await page.evaluate(() => window.__tebrun!.car());
+    expect(car).not.toBe(car0);
+    await page.mouse.click(640, 560); // fuori dall'elenco: si parte
+    await expect.poll(() => screenName(page)).toBe('race');
+    await expect.poll(() => screenName(page), { timeout: 20_000 }).toBe('gameOver');
+    await page.waitForTimeout(800);
+    await page.screenshot({ path: 'e2e/out/retry-gameover-mouse.png' });
+    const mode = await page.evaluate(() => window.__tebrun!.mode());
+    await page.mouse.click(550, 654); // RETRY
+    await expect.poll(() => screenName(page)).toBe('race');
+    expect(await page.evaluate(() => window.__tebrun!.car())).toBe(car);
+    expect(await page.evaluate(() => window.__tebrun!.mode())).toBe(mode);
+  });
+
+  test('il dispositivo resta la tastiera, il clic parte, il mouse non guida, i comandi a schermo ci sono', async ({ page }) => {
     await page.goto('/#debug');
     await page.waitForFunction(() => window.__tebrun?.app.name === 'title');
     expect(await page.evaluate(() => window.__tebrun?.device())).toBe('keyboard');
@@ -374,12 +413,10 @@ test.describe('desktop senza touch', () => {
     await expect.poll(() => screenName(page)).toBe('radio');
     await page.waitForTimeout(400);
     await page.screenshot({ path: 'e2e/out/launch-w3a-radio-desktop.png' });
-    // Un clic dove sul telefono c'è START non fa partire niente.
+    // Un clic del mouse fuori dall'elenco dei brani fa partire (ma è il mouse, non il pulsante del tocco).
     await page.mouse.click(button('radio', 'start').x, button('radio', 'start').y);
-    await page.waitForTimeout(300);
-    expect(await screenName(page)).toBe('radio');
-    await page.keyboard.press('Enter');
     await expect.poll(() => screenName(page)).toBe('race');
+    expect(await page.evaluate(() => window.__tebrun?.device())).toBe('keyboard');
     await page.waitForTimeout(1200);
     await page.screenshot({ path: 'e2e/out/launch-w3a-hint-desktop.png' });
     await expect.poll(() => countdown(page), { timeout: 15_000 }).toBeNull();

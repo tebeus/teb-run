@@ -1,19 +1,19 @@
 import { createParticles, playerSegment } from '../../render/effects';
-import { renderHud } from '../../render/hud';
+import { renderHud, startLightPhase } from '../../render/hud';
 import { createSkidTrail } from '../../render/skid';
 import { createFlock } from '../../render/wildlife';
 import { DOMINANT_MIX, surfaceBlendOf } from '../../game/surface';
 import type { Gear, RaceEngine, RaceEvent, RaceSnapshot, SfxName } from '../../types';
 import type { ScreenDeps } from '../deps';
 import { go, type Screen, type ScreenPayloads, type Transition } from '../fsm';
-import { drawRaceHint, raceHintAlpha } from '../controlsHelp';
+import { drawGoalLine, drawRaceHint, goalLineAlpha, raceHintAlpha } from '../controlsHelp';
 import { closedPause, drawPause, openPause, stepPause, wantsPause, type PauseState } from '../pause';
 import { drawTextOutlined } from '../text';
 import { LOGICAL_H, LOGICAL_W } from '../../core/canvas';
 import { stagedOf } from '../../core/assets';
 import { successorIds } from '../../core/phases';
 import { GAMEPLAY } from '../../core/gameplayEvents';
-import { GAMEPLAY_EVENTS_BUILD } from '../../core/target';
+import { GOAL_LINE_BUILD, SDK_BUILD } from '../../core/target';
 import { STAGES } from '../../game/stages';
 
 /** Il payload di ingresso in gara: valida `song`, con 0 come default sicuro. Pura. */
@@ -34,7 +34,10 @@ export function parseRacePayload(payload: unknown): ScreenPayloads['race'] {
 export function handleRaceEvents(
   events: RaceEvent[],
   snapshot: RaceSnapshot,
+  /** Il brano della gara: va nel payload di fine partita, per RETRY. Assente, il payload non lo porta. */
+  song?: number,
 ): { transition: Transition | null; sfx: SfxName[] } {
+  const withSong = song === undefined ? {} : { song };
   const sfx: SfxName[] = [];
   let transition: Transition | null = null;
 
@@ -63,6 +66,7 @@ export function handleRaceEvents(
             stage: snapshot.stage,
             route: [...snapshot.route],
             time: snapshot.elapsed,
+            ...withSong,
           });
         }
         break;
@@ -73,6 +77,7 @@ export function handleRaceEvents(
             stage: ev.stage,
             route: [...snapshot.route],
             time: snapshot.elapsed,
+            ...withSong,
           });
         }
         break;
@@ -186,6 +191,13 @@ export function createRaceScreen(deps: ScreenDeps): Screen {
   // sessione, per i primi secondi, fermo con la pausa. null = spento.
   let hintT: number | null = null;
   let hintShown = false;
+  // La riga dell'obiettivo (solo build crazygames): come il suggerimento,
+  // solo alla prima gara della sessione; si spegne anche al primo checkpoint.
+  let goalT: number | null = null;
+  // La pubblicità fra due partite (solo build crazygames): la gara aspetta
+  // ferma sulla griglia, senza musica né input, finché l'SDK non risponde.
+  let adWait = false;
+  let songPending = false;
 
   /** Motore, derapata, sterrato, pioggia e musica: tutto zitto. */
   const silence = (): void => {
@@ -208,19 +220,48 @@ export function createRaceScreen(deps: ScreenDeps): Screen {
       particles.clear();
       trail.clear();
       pause = closedPause();
+      goalT = GOAL_LINE_BUILD && !hintShown ? 0 : null;
       hintT = hintShown ? null : 0;
       hintShown = true;
       // Un tocco o una perdita di fuoco arrivati prima della gara (titolo,
       // radio) non devono aprire la pausa al primo tick.
       deps.signals?.takeTap();
       deps.signals?.takeFocusLost();
-      deps.audio.playSong(song);
+      if (SDK_BUILD) {
+        // Dalla seconda partita della sessione, prima la pubblicità; la
+        // musica parte quando la gara può partire (anche subito, qui dentro).
+        adWait = true;
+        songPending = true;
+        GAMEPLAY.nextGame(() => {
+          adWait = false;
+        });
+        if (!adWait) {
+          songPending = false;
+          deps.audio.playSong(song);
+        }
+      } else {
+        deps.audio.playSong(song);
+      }
     },
     update(dt, actions) {
       if (!engine) return null;
+      if (SDK_BUILD && adWait) {
+        // La pubblicità: niente motore, niente input; tocchi e fuoco perso
+        // (l'annuncio lo prende) non devono aprire la pausa dopo.
+        snapshot ??= engine.snapshot();
+        deps.signals?.takeTap();
+        deps.signals?.takeFocusLost();
+        return null;
+      }
+      if (SDK_BUILD && songPending) {
+        songPending = false;
+        deps.signals?.takeTap();
+        deps.signals?.takeFocusLost();
+        deps.audio.playSong(song);
+      }
       // Eventi di gioco per l'SDK del portale (solo build crazygames): in
       // corsa, in pausa o no. Lo stato è quello del tick prima.
-      if (GAMEPLAY_EVENTS_BUILD) GAMEPLAY.race(pause.open);
+      if (SDK_BUILD) GAMEPLAY.race(pause.open);
       const tap = deps.signals?.takeTap() ?? null;
       const focusLost = deps.signals?.takeFocusLost() ?? false;
       if (pause.open) {
@@ -268,13 +309,16 @@ export function createRaceScreen(deps: ScreenDeps): Screen {
         waiting = false;
       }
       if (hintT !== null) hintT += dt;
+      // La riga dell'obiettivo conta solo dopo il semaforo e READY/GO.
+      if (GOAL_LINE_BUILD && goalT !== null && startLightPhase(snapshot?.countdown) === 'none') goalT += dt;
       const events = engine.update(dt, actions);
+      if (GOAL_LINE_BUILD && events.some((ev) => ev.type === 'checkpoint')) goalT = null;
       snapshot = engine.snapshot();
       particles.update(dt, snapshot, deps.car?.get());
       trail.update(dt, snapshot);
       birds.update(dt, snapshot);
 
-      const { transition, sfx } = handleRaceEvents(events, snapshot);
+      const { transition, sfx } = handleRaceEvents(events, snapshot, song);
       for (const name of sfx) deps.audio.sfx(name);
       // Lo scoppio dell'incidente non si ricava dallo snapshot, che dice
       // solo che l'incidente è in corso: lo fa partire l'evento (spec §4.4b).
@@ -311,9 +355,10 @@ export function createRaceScreen(deps: ScreenDeps): Screen {
       // fermo, quindi a CONTINUE riappare dov'era.
       if (pause.open) drawPause(ctx, pause, device);
       else if (hintT !== null) drawRaceHint(ctx, device, raceHintAlpha(hintT), deps.tiltOn?.() === true);
+      if (GOAL_LINE_BUILD && goalT !== null && !pause.open && startLightPhase(snapshot.countdown) === 'none') drawGoalLine(ctx, goalLineAlpha(goalT));
     },
     exit() {
-      if (GAMEPLAY_EVENTS_BUILD) GAMEPLAY.raceOver();
+      if (SDK_BUILD) GAMEPLAY.raceOver();
       deps.audio.setEngine(0, 'lo', false);
       deps.audio.setSkid(false);
       deps.audio.setRumble(false, 0);
@@ -328,6 +373,8 @@ export function createRaceScreen(deps: ScreenDeps): Screen {
       pause = closedPause();
       particles.clear();
       trail.clear();
+      adWait = false;
+      songPending = false;
     },
   };
 }

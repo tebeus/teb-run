@@ -45,7 +45,9 @@ export function createApp(deps: ScreenDeps): Fsm {
       // dell'ondata di fix finale del binario G, solo race.ts guardava
       // actions.mute, e tornare al titolo lasciava la musica della gara a
       // suonare senza modo di zittirla.
-      if (actions.mute && deps.audio.available) deps.audio.toggleMute();
+      // Durante la pubblicità fra due partite (build crazygames) ogni input
+      // aspetta, M compreso: lo stato di M resta quello di prima.
+      if (actions.mute && deps.audio.available && deps.inputLocked?.() !== true) deps.audio.toggleMute();
       fsm.update(dt, actions);
       if (fsm.name !== shown) {
         shown = fsm.name;

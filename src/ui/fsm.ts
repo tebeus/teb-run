@@ -26,11 +26,15 @@ export interface ScreenPayloads {
   title: undefined;
   radio: undefined;
   race: { song: number };
-  /** `time`: secondi di gara della partita, per la scheda da condividere. */
-  ending: { ending: number; score: number; stage: StageDef; route: ('L' | 'R')[]; time?: number };
-  gameOver: { score: number; stage: StageDef; route: ('L' | 'R')[]; time?: number };
-  nameEntry: { score: number; stageId: string; route: ('L' | 'R')[] };
-  scores: { highlight?: number } | undefined;
+  /**
+   * `time`: secondi di gara della partita, per la scheda da condividere.
+   * `song`: il brano della partita, perché RETRY riparta con lo stesso.
+   */
+  ending: { ending: number; score: number; stage: StageDef; route: ('L' | 'R')[]; time?: number; song?: number };
+  gameOver: { score: number; stage: StageDef; route: ('L' | 'R')[]; time?: number; song?: number };
+  nameEntry: { score: number; stageId: string; route: ('L' | 'R')[]; song?: number };
+  /** `retry`: la TOP 10 dopo le iniziali, con RETRY per ripartire con quel brano. */
+  scores: { highlight?: number; retry?: { song: number } } | undefined;
 }
 
 /** Costruisce una transizione con payload tipizzato. Preferirlo a un letterale `{ to, payload }`. */

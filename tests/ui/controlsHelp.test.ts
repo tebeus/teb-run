@@ -11,6 +11,7 @@ import {
   radioChangeLine,
   radioControlLines,
   radioMenuLine,
+  titleStartLine,
 } from '../../src/ui/controlsHelp';
 import { pauseHintLine } from '../../src/ui/pause';
 import { createRaceScreen } from '../../src/ui/screens/race';
@@ -29,6 +30,7 @@ describe('righe dei comandi', () => {
       radioMenuLine(d),
       radioChangeLine(d, 'C'),
       radioChangeLine(d, 'D'),
+      titleStartLine(d),
       ...raceHintLines(d),
       ...raceHintLines(d, true),
       pauseHintLine(d),
@@ -53,8 +55,13 @@ describe('righe dei comandi', () => {
     expect(raceHintLines('touch', true).join(' ')).toContain('TILT THE PHONE TO STEER');
     expect(raceHintLines('touch', true).join(' ')).not.toContain('<');
     expect(raceHintLines('keyboard', true)).toEqual(raceHintLines('keyboard'));
-    expect(radioMenuLine('keyboard')).toBe('LEFT RIGHT TO CHOOSE, ENTER TO START');
-    expect(radioChangeLine('keyboard', 'C')).toBe('C TO CHANGE');
+    expect(radioMenuLine('keyboard')).toBe('LEFT RIGHT OR CLICK A SONG, ENTER OR CLICK OUTSIDE TO START');
+    expect(radioChangeLine('keyboard', 'C')).toBe('C OR CLICK TO CHANGE');
+    expect(radioMenuLine('pad')).toBe('LEFT RIGHT TO CHOOSE, A TO START');
+    expect(radioChangeLine('touch', 'C')).toBe('TAP TO CHANGE');
+    expect(titleStartLine('keyboard')).toBe('CLICK OR PRESS ENTER');
+    expect(titleStartLine('touch')).toBe('TAP TO START');
+    expect(titleStartLine('pad')).toBe('PRESS A TO START');
     expect(pauseHintLine()).toBe('UP/DOWN + ENTER   ESC/P TO RESUME');
   });
 

@@ -365,6 +365,9 @@ export function createAudioBus(scope?: AudioScope, options: AudioBusOptions = {}
     toggleMute(): boolean {
       return host.toggleMute();
     },
+    setHostMute(reason, on) {
+      host.setHostMute(reason, on);
+    },
     get muted(): boolean {
       return host.muted;
     },

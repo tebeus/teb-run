@@ -197,7 +197,7 @@ describe('the result of a screen', () => {
     const slot = createShareSlot();
     const deps = {
       assets: createEmptyAssets(),
-      scores: { qualifies: () => false } as unknown as ScoresStore,
+      scores: { qualifies: () => false, load: () => [] } as unknown as ScoresStore,
       firstStage: stage,
       share: slot,
     } as unknown as ScreenDeps;
@@ -209,8 +209,8 @@ describe('the result of a screen', () => {
     expect(slot.current()).toBeNull();
   });
 
-  test('after SHARE the screen waits for ENTER instead of timing out', () => {
-    const base = { t: 0, payload: { score: 1, stage, route: [] as ('L' | 'R')[] }, qualifies: false };
+  test('after SHARE the screen waits for ENTER instead of timing out (the time runs only before the initials)', () => {
+    const base = { t: 0, payload: { score: 1, stage, route: [] as ('L' | 'R')[] }, qualifies: true };
     expect(stepGameOver(base, 10, emptyActions(), true).transition).toBeNull();
     expect(stepGameOver(base, 10, emptyActions(), false).transition).not.toBeNull();
     expect(stepGameOver(base, 0.1, { ...emptyActions(), confirm: true }, true).transition).not.toBeNull();

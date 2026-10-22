@@ -4,6 +4,7 @@ import type { Actions } from '../../types';
 import type { ScreenDeps } from '../deps';
 import { go, type Screen, type ScreenPayloads, type Transition } from '../fsm';
 import { drawText } from '../text';
+import { mouseButtonActions } from '../touch';
 
 export const NAME_ENTRY_TIMEOUT_S = 30;
 const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
@@ -30,6 +31,7 @@ export function parseNameEntryPayload(payload: unknown): NameEntryPayload {
     score: typeof p?.score === 'number' ? p.score : 0,
     stageId: typeof p?.stageId === 'string' ? p.stageId : '',
     route: Array.isArray(p?.route) ? p.route : [],
+    ...(typeof p?.song === 'number' ? { song: p.song } : {}),
   };
 }
 
@@ -128,7 +130,8 @@ export function createNameEntryScreen(deps: ScreenDeps): Screen {
       state = initialNameEntryState(parseNameEntryPayload(payload));
     },
     update(dt, actions) {
-      const r = stepNameEntry(state, dt, actions);
+      // Un clic del mouse su UP, DOWN o NEXT vale quel pulsante per un tick.
+      const r = stepNameEntry(state, dt, { ...actions, ...mouseButtonActions('nameEntry', actions.click) });
       state = r.state;
       if (!r.commit) return null;
 
@@ -142,7 +145,8 @@ export function createNameEntryScreen(deps: ScreenDeps): Screen {
       });
       // insert() ritorna il rango 1-based (o -1); la tabella in scores.ts si
       // indicizza da 0, quindi si converte qui, all'unico punto di contatto.
-      return go('scores', { highlight: rank > 0 ? rank - 1 : undefined });
+      // Dopo le iniziali la TOP 10 offre RETRY, con il brano della partita.
+      return go('scores', { highlight: rank > 0 ? rank - 1 : undefined, retry: { song: state.payload.song ?? 0 } });
     },
     render(ctx) {
       // Sfondo proprio: `createApp.render` già pulisce il frame ad ogni

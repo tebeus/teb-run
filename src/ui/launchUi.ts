@@ -163,6 +163,8 @@ export function toLogical(clientX: number, clientY: number, box: { left: number;
 export interface LaunchUi {
   /** Da chiamare dopo `app.render`, a ogni fotogramma. */
   draw(ctx: CanvasRenderingContext2D): void;
+  /** Il punto logico è su un link o sul pulsante dello schermo intero? Lì il clic non va alle schermate. */
+  hits(p: { x: number; y: number }): boolean;
 }
 
 /**
@@ -220,6 +222,7 @@ export function installLaunchUi(win: Window, canvas: HTMLCanvasElement, screen: 
   }
 
   return {
+    hits: (p) => hitButton(p.x, p.y) || hitLink(p.x, p.y) !== null,
     draw(ctx) {
       if (screen() === 'title') drawTitleLinks(ctx, links);
       if (showsFullscreenButton(screen(), available)) drawFullscreenButton(ctx, button, isFullscreen(doc));

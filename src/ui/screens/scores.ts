@@ -6,6 +6,7 @@ import type { ScreenDeps } from '../deps';
 import { go, type Screen, type ScreenPayloads, type Transition } from '../fsm';
 import { stageNumber } from '../shareCard';
 import { drawText } from '../text';
+import { drawRetryMenu, initialRetryMenu, stepRetryMenu, type RetryMenuState } from '../retryMenu';
 
 export const SCORES_DURATION_S = 8;
 
@@ -29,28 +30,44 @@ export function stageLabel(stageId: string): string {
 export interface ScoresState {
   t: number;
   highlight?: number;
+  /** Dopo le iniziali: RETRY con questo brano, e MENU. Assente, la TOP 10 del ciclo attrattivo. */
+  retry?: { song: number; menu: RetryMenuState };
 }
 
-/** Valida il payload opzionale: un `highlight` numerico, o nessuno. Pura. */
+/** Valida il payload opzionale: un `highlight` numerico e un `retry` con il brano, o nessuno dei due. Pura. */
 export function parseScoresPayload(payload: unknown): ScreenPayloads['scores'] {
-  const p = payload as { highlight?: unknown } | undefined;
-  if (p && typeof p.highlight === 'number' && Number.isFinite(p.highlight)) {
-    return { highlight: p.highlight };
-  }
-  return undefined;
+  const p = payload as { highlight?: unknown; retry?: { song?: unknown } } | undefined;
+  const highlight = p && typeof p.highlight === 'number' && Number.isFinite(p.highlight) ? { highlight: p.highlight } : {};
+  const song = p?.retry?.song;
+  const retry = typeof song === 'number' && Number.isInteger(song) && song >= 0 ? { retry: { song } } : {};
+  const out = { ...highlight, ...retry };
+  return Object.keys(out).length > 0 ? out : undefined;
 }
 
-/** ENTER o 8 secondi portano al titolo, indipendentemente da quali altri tasti siano tenuti giù. Pura. */
+/**
+ * Nel ciclo attrattivo ENTER, un clic del mouse o 8 secondi portano al
+ * titolo, indipendentemente da quali altri tasti siano tenuti giù. Dopo le
+ * iniziali, invece, RETRY e MENU senza tempo (`tap`: il tocco o il clic del
+ * tick). Pura.
+ */
 export function stepScores(
   state: ScoresState,
   dt: number,
   actions: Actions,
+  tap: { x: number; y: number } | null = null,
 ): { state: ScoresState; transition: Transition | null } {
   const t = state.t + dt;
+  if (state.retry !== undefined) {
+    const r = stepRetryMenu(state.retry.menu, dt, actions, tap);
+    const next: ScoresState = { t, highlight: state.highlight, retry: { song: state.retry.song, menu: r.state } };
+    if (r.chosen === 'retry') return { state: next, transition: go('race', { song: state.retry.song }) };
+    if (r.chosen === 'menu') return { state: next, transition: go('title', undefined) };
+    return { state: next, transition: null };
+  }
   const next: ScoresState = { t, highlight: state.highlight };
   // +1e-9: la stessa tolleranza di core/loop.ts, per non perdere la soglia
   // per un residuo di virgola mobile dopo molte somme di dt piccoli.
-  if (actions.confirm || t + 1e-9 >= SCORES_DURATION_S) {
+  if (actions.confirm || actions.click || t + 1e-9 >= SCORES_DURATION_S) {
     return { state: next, transition: go('title', undefined) };
   }
   return { state: next, transition: null };
@@ -66,11 +83,16 @@ export function createScoresScreen(deps: ScreenDeps): Screen {
   return {
     enter(payload) {
       const parsed = parseScoresPayload(payload);
-      state = { t: 0, highlight: parsed?.highlight };
+      state = {
+        t: 0,
+        highlight: parsed?.highlight,
+        ...(parsed?.retry === undefined ? {} : { retry: { song: parsed.retry.song, menu: initialRetryMenu() } }),
+      };
       entries = deps.scores.load();
+      deps.signals?.takeTap();
     },
     update(dt, actions) {
-      const r = stepScores(state, dt, actions);
+      const r = stepScores(state, dt, actions, state.retry === undefined ? null : (deps.signals?.takeTap() ?? null));
       state = r.state;
       return r.transition;
     },
@@ -96,6 +118,7 @@ export function createScoresScreen(deps: ScreenDeps): Screen {
         drawText(ctx, stageLabel(entry.stageId), col.stage, y, 2, '#cccccc', 'left');
         drawText(ctx, entry.route, col.route, y, 2, '#888888', 'left');
       });
+      if (state.retry !== undefined) drawRetryMenu(ctx, state.retry.menu, deps.device?.() ?? 'keyboard');
     },
   };
 }

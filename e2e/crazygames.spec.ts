@@ -1,10 +1,18 @@
 // La build crazygames come la gioca CrazyGames: dentro un iframe di un'altra
 // origine (qui il gioco su 127.0.0.1, la pagina che lo ospita su localhost,
-// porte diverse), senza permessi (niente allow="fullscreen" né sensori), e
-// con localStorage bloccato come in un iframe di terze parti. Una partita da
-// tastiera fino al game over, una al tocco fino alla gara; niente errori,
-// niente richieste fallite o esterne, nessuna richiesta di schermo intero.
-// Le build pubbliche non hanno `#debug`: lo stato si guarda dai pixel.
+// porte diverse), senza permessi (niente allow="fullscreen" né sensori).
+// L'SDK di CrazyGames è finto (servito al posto di quello vero, ambiente
+// `local`, con una pubblicità finta che registra le chiamate) o assente
+// (la richiesta bloccata, come offline o con un adblock):
+// - solo mouse, SDK finto, localStorage bloccato: dal titolo alla gara, il
+//   game over, le iniziali, RETRY, la pubblicità fra le due partite (in
+//   video), e l'ordine delle chiamate all'SDK;
+// - solo tastiera, SDK assente: la radio parte da sola col timer, e RETRY
+//   riparte subito, senza aspettare nessuna pubblicità;
+// - col tocco, SDK assente: titolo, radio, TILT senza permesso, gara.
+// Niente errori, niente richieste fallite o esterne (oltre all'SDK),
+// nessuna richiesta di schermo intero. Le build pubbliche non hanno
+// `#debug`: lo stato si guarda dai pixel e dalle chiamate all'SDK.
 
 import { devices, expect, test, type Frame, type Page } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
@@ -15,7 +23,9 @@ import { extname, join, normalize } from 'node:path';
 import { COUNTDOWN_SECONDS } from '../src/game/race';
 import { STAGES } from '../src/game/stages';
 import { touchLayout } from '../src/ui/touch';
+import { CONTINUE_RECT, RETRY_INPUT_DELAY_S, RETRY_RECT } from '../src/ui/retryMenu';
 import type { ScreenName } from '../src/ui/fsm';
+import type { Rect } from '../src/ui/rect';
 
 /** `E2E_CRAZYGAMES_PORT` le sposta, se due copie del progetto provano insieme. */
 const GAME_PORT = Number(process.env.E2E_CRAZYGAMES_PORT ?? 5430);
@@ -76,44 +86,110 @@ test.afterAll(async () => {
   if (build) rmSync(build, { recursive: true, force: true });
 });
 
-/** Errori, richieste fallite o fuori dal gioco, e richieste di schermo intero. */
+/** Lo script dell'SDK, come lo chiede il gioco (src/core/crazySdk.ts). */
+const SDK_URL = 'https://sdk.crazygames.com/crazygames-sdk-v3.js';
+
+/**
+ * Errori, richieste fallite o fuori dal gioco, e richieste di schermo intero.
+ * La richiesta dell'SDK è l'unica esterna ammessa: servita (finto) o bloccata
+ * (assente) da `sdk`, qui non conta.
+ */
 function watch(page: Page): { errors: string[]; failed: string[]; outside: string[] } {
   const out = { errors: [] as string[], failed: [] as string[], outside: [] as string[] };
   page.on('pageerror', (error) => out.errors.push(error.message));
   page.on('console', (msg) => {
-    if (msg.type() === 'error') out.errors.push(msg.text());
+    // La richiesta dell'SDK bloccata apposta lascia il suo errore di rete in console.
+    if (msg.type() === 'error' && !msg.text().includes('ERR_FAILED') && !msg.text().includes('ERR_BLOCKED')) out.errors.push(msg.text());
   });
   page.on('response', (r) => {
     if (r.status() >= 400) out.failed.push(`${r.status()} ${r.url()}`);
   });
-  page.on('requestfailed', (r) => out.failed.push(`failed ${r.url()}`));
+  page.on('requestfailed', (r) => {
+    if (r.url() !== SDK_URL) out.failed.push(`failed ${r.url()}`);
+  });
   page.on('request', (r) => {
     const origin = new URL(r.url()).origin;
-    if (origin !== GAME_ORIGIN && origin !== HOST_ORIGIN) out.outside.push(r.url());
+    if (origin !== GAME_ORIGIN && origin !== HOST_ORIGIN && r.url() !== SDK_URL) out.outside.push(r.url());
   });
   return out;
 }
 
 /**
+ * Un SDK finto al posto di quello vero, nell'ambiente `local`: registra le
+ * chiamate in `window.__sdkCalls` e, a `requestAd`, mostra per 2,5 s un
+ * riquadro "FAKE AD" sopra il gioco (adStarted dopo 0,3 s, poi adFinished).
+ */
+const FAKE_SDK = `(() => {
+  const calls = (window.__sdkCalls = []);
+  const log = (name) => calls.push(name);
+  window.CrazyGames = { SDK: {
+    environment: 'local',
+    init: () => { log('init'); return new Promise((r) => setTimeout(r, 200)); },
+    game: {
+      gameplayStart: () => log('gameplayStart'),
+      gameplayStop: () => log('gameplayStop'),
+      loadingStart: () => log('loadingStart'),
+      loadingStop: () => log('loadingStop'),
+      happytime: () => log('happytime'),
+      settings: { muteAudio: false },
+      addSettingsChangeListener: () => undefined,
+    },
+    ad: {
+      requestAd: (type, cb) => {
+        log('requestAd:' + type);
+        const d = document.createElement('div');
+        d.textContent = 'FAKE AD (local test)';
+        d.style.cssText = 'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.85);color:#fff;font:bold 48px sans-serif;z-index:9';
+        setTimeout(() => { document.body.appendChild(d); log('adStarted'); cb.adStarted && cb.adStarted(); }, 300);
+        setTimeout(() => { d.remove(); log('adFinished'); cb.adFinished && cb.adFinished(); }, 2800);
+      },
+    },
+  } };
+})();`;
+
+/** L'SDK finto, o nessuno (la richiesta bloccata, come offline o con un adblock). */
+async function sdk(page: Page, kind: 'fake' | 'absent'): Promise<void> {
+  await page.route(SDK_URL, (route) =>
+    kind === 'fake' ? route.fulfill({ status: 200, contentType: 'text/javascript', body: FAKE_SDK }) : route.abort('blockedbyclient'),
+  );
+}
+
+/** Le chiamate all'SDK finto, nell'iframe. */
+function sdkCalls(frame: Frame): Promise<string[]> {
+  return frame.evaluate(() => (window as unknown as { __sdkCalls?: string[] }).__sdkCalls ?? []);
+}
+
+const centre = (r: Rect): { x: number; y: number } => ({ x: r.x + r.w / 2, y: r.y + r.h / 2 });
+
+/**
  * Nel solo iframe del gioco: localStorage che lancia (terze parti bloccate),
  * e requestFullscreen registrato invece che eseguito.
  */
-async function blockStorageAndSpyFullscreen(page: Page): Promise<void> {
-  await page.addInitScript((gameOrigin) => {
+async function blockStorageAndSpyFullscreen(page: Page, storage: 'blocked' | 'top10' = 'blocked'): Promise<void> {
+  await page.addInitScript(
+    ([gameOrigin, mode]) => {
     if (location.origin !== gameOrigin) return;
-    Object.defineProperty(window, 'localStorage', {
-      configurable: true,
-      get() {
-        throw new DOMException('blocked', 'SecurityError');
-      },
-    });
+    if (mode === 'top10') {
+      // Una TOP 10 piena di record irraggiungibili: il game over offre RETRY, non le iniziali.
+      const top = Array.from({ length: 10 }, () => ({ name: 'CPU', score: 9_999_999, stageId: '4-4', route: 'L L L L', date: '2026-10-21T00:00:00.000Z' }));
+      localStorage.setItem('tebrun.scores.normal.v1', JSON.stringify(top));
+    } else {
+      Object.defineProperty(window, 'localStorage', {
+        configurable: true,
+        get() {
+          throw new DOMException('blocked', 'SecurityError');
+        },
+      });
+    }
     const w = window as unknown as { __fullscreenAsked: number };
     w.__fullscreenAsked = 0;
     Element.prototype.requestFullscreen = function () {
       w.__fullscreenAsked++;
       return Promise.resolve();
     };
-  }, GAME_ORIGIN);
+    },
+    [GAME_ORIGIN, storage] as const,
+  );
 }
 
 async function gameFrame(page: Page): Promise<Frame> {
@@ -144,50 +220,134 @@ function canvasPrint(frame: Frame): Promise<string> {
   });
 }
 
-test('keyboard: title, radio and a whole game in a cross-origin iframe, storage blocked', async ({ page }) => {
-  // Tutta la tappa a tempo pieno, poi il game over.
+
+/** Un clic del mouse in un punto logico 1280x720 del gioco. */
+async function click(page: Page, frame: Frame, p: { x: number; y: number }): Promise<void> {
+  const q = await toPage(frame, p);
+  await page.mouse.click(q.x, q.y);
+}
+
+const fullscreenAsked = (frame: Frame): Promise<number> =>
+  frame.evaluate(() => (window as unknown as { __fullscreenAsked: number }).__fullscreenAsked);
+
+test.describe('mouse only, with a fake SDK', () => {
+  test('title, radio, race, game over, initials, RETRY, and the ad between the two games', async ({ browser }) => {
+    // Un contesto proprio, per il video della pubblicità finta.
+    const context = await browser.newContext({ viewport: { width: 1280, height: 720 }, recordVideo: { dir: 'e2e/out/video', size: { width: 1280, height: 720 } } });
+    const page = await context.newPage();
+    const limit = STAGES.get('0-0')!.timeLimit;
+    test.setTimeout((limit + 120) * 1000);
+    const seen = watch(page);
+    await sdk(page, 'fake');
+    await blockStorageAndSpyFullscreen(page);
+    const frame = await gameFrame(page);
+    // Lo screenshot non porta il puntatore del sistema: la manina la dice il CSS del canvas.
+    const sky = await toPage(frame, { x: 640, y: 300 });
+    await page.mouse.move(sky.x, sky.y);
+    expect(await frame.evaluate(() => (document.getElementById('game') as HTMLCanvasElement).style.cursor)).toBe('pointer');
+    await page.screenshot({ path: 'e2e/out/crazygames-mouse-title.png' });
+
+    // Un clic sul titolo: la radio, col timer.
+    await click(page, frame, { x: 640, y: 300 });
+    await page.waitForTimeout(1500);
+    await page.screenshot({ path: 'e2e/out/crazygames-radio-timer.png' });
+    // Un clic sul terzo brano lo sceglie e non parte; un clic sul pannello parte.
+    const radio = await canvasPrint(frame);
+    await click(page, frame, { x: 640, y: 130 + 2 * 32 + 8 });
+    await page.waitForTimeout(600);
+    expect(await canvasPrint(frame)).not.toBe(radio);
+    await click(page, frame, { x: 640, y: 560 });
+    // Dopo il semaforo e GO, la riga dell'obiettivo.
+    await page.waitForTimeout((COUNTDOWN_SECONDS + 3) * 1000);
+    await page.screenshot({ path: 'e2e/out/crazygames-goal-line.png' });
+    expect(await sdkCalls(frame)).toContain('gameplayStart');
+
+    // Nessun gas: il tempo finisce, il game over (la gara esce con gameplayStop).
+    // Con la TOP 10 vuota prima le iniziali: CONTINUE, entro i suoi tre secondi.
+    await expect.poll(() => sdkCalls(frame), { timeout: (limit + 10) * 1000, intervals: [100] }).toContain('gameplayStop');
+    await page.waitForTimeout(900);
+    await page.screenshot({ path: 'e2e/out/crazygames-gameover-continue.png' });
+    await click(page, frame, centre(CONTINUE_RECT));
+    await page.waitForTimeout(1200);
+    const next = centre(touchLayout('nameEntry', { tiltAvailable: false, tiltOn: false, cssPerLogical: 1 }).find((b) => b.id === 'next')!.rect);
+    await page.screenshot({ path: 'e2e/out/crazygames-initials-mouse.png' });
+    for (let i = 0; i < 3; i++) {
+      await click(page, frame, next);
+      await page.waitForTimeout(200);
+    }
+    // La TOP 10 con RETRY e MENU.
+    await page.waitForTimeout(1200 + RETRY_INPUT_DELAY_S * 1000);
+    await page.screenshot({ path: 'e2e/out/crazygames-retry.png' });
+    const before = await sdkCalls(frame);
+    expect(before.filter((c) => c.startsWith('requestAd'))).toEqual([]);
+    expect(before[before.length - 1]).toBe('gameplayStop');
+
+    // RETRY: prima la pubblicità finta, poi la gara.
+    await click(page, frame, centre(RETRY_RECT));
+    await page.waitForTimeout(1200);
+    await page.screenshot({ path: 'e2e/out/crazygames-fake-ad.png' });
+    await page.waitForTimeout(3000);
+    await page.screenshot({ path: 'e2e/out/crazygames-after-ad.png' });
+    const calls = await sdkCalls(frame);
+    const tail = calls.slice(before.length);
+    expect(tail).toEqual(['requestAd:midgame', 'adStarted', 'adFinished', 'gameplayStart']);
+    // Mai due start o due stop di fila, dall'inizio.
+    const play = calls.filter((c) => c === 'gameplayStart' || c === 'gameplayStop');
+    for (let i = 1; i < play.length; i++) expect(play[i]).not.toBe(play[i - 1]);
+    expect(calls[0]).toBe('init');
+
+    expect(seen.errors).toEqual([]);
+    expect(seen.failed).toEqual([]);
+    expect(seen.outside).toEqual([]);
+    expect(await fullscreenAsked(frame)).toBe(0);
+    const video = page.video();
+    await context.close();
+    await video?.saveAs('e2e/out/crazygames-fake-ad.webm');
+  });
+});
+
+test('keyboard only, no SDK: the radio starts by itself, and RETRY races at once', async ({ page }) => {
   const limit = STAGES.get('0-0')!.timeLimit;
   test.setTimeout((limit + 90) * 1000);
   const seen = watch(page);
-  await blockStorageAndSpyFullscreen(page);
+  await sdk(page, 'absent');
+  await blockStorageAndSpyFullscreen(page, 'top10');
   const frame = await gameFrame(page);
   expect(await frame.evaluate(() => window.top !== window.self)).toBe(true);
   await page.screenshot({ path: 'e2e/out/crazygames-title.png' });
 
-  // Il fuoco nell'iframe: un clic sul cielo del titolo, lontano dai link.
-  const sky = await toPage(frame, { x: 640, y: 40 });
-  await page.mouse.click(sky.x, sky.y);
-  // F non chiede lo schermo intero; dove c'era ABOUT un clic non apre niente.
+  // Il fuoco nell'iframe: un clic sul titolo (che porta alla radio).
+  await click(page, frame, { x: 640, y: 300 });
+  // F non chiede lo schermo intero.
   await page.keyboard.press('KeyF');
-  const about = await toPage(frame, { x: 200, y: 692 });
-  let popups = 0;
-  page.on('popup', () => popups++);
-  await page.mouse.click(about.x, about.y);
-  await page.waitForTimeout(500);
-  expect(popups).toBe(0);
-  expect(await frame.evaluate(() => (window as unknown as { __fullscreenAsked: number }).__fullscreenAsked)).toBe(0);
-
-  await page.keyboard.press('Enter');
-  await page.waitForTimeout(1200);
-  await page.keyboard.press('Enter');
-  await page.waitForTimeout((COUNTDOWN_SECONDS + 1.5) * 1000);
+  await page.waitForTimeout(1500);
+  const radio = await canvasPrint(frame);
+  // Il timer: senza toccare niente, dopo dieci secondi si è in gara.
+  await page.waitForTimeout(10_000);
+  expect(await canvasPrint(frame)).not.toBe(radio);
+  await page.waitForTimeout((COUNTDOWN_SECONDS + 0.5) * 1000);
   await page.keyboard.down('ArrowUp');
-  const before = await canvasPrint(frame);
+  const moving = await canvasPrint(frame);
   await page.waitForTimeout(2000);
-  expect(await canvasPrint(frame)).not.toBe(before);
+  expect(await canvasPrint(frame)).not.toBe(moving);
   await page.screenshot({ path: 'e2e/out/crazygames-race.png' });
-  // Il tempo finisce prima del bivio (gas a tavoletta e nessuno sterzo):
-  // il game over dura 3 s, si fotografa nel mezzo.
-  await page.waitForTimeout((limit - 2 - 1.5 + 1.2) * 1000);
+  // Il tempo finisce prima del bivio (gas a tavoletta e nessuno sterzo).
+  await page.waitForTimeout((limit - 2) * 1000);
   await page.keyboard.up('ArrowUp');
-  await page.screenshot({ path: 'e2e/out/crazygames-gameover.png' });
-  await page.waitForTimeout(3500);
-  await page.screenshot({ path: 'e2e/out/crazygames-after-gameover.png' });
+  await page.waitForTimeout(2000 + RETRY_INPUT_DELAY_S * 1000);
+  // Nessun record: RETRY e MENU, che restano senza tempo.
+  await page.screenshot({ path: 'e2e/out/crazygames-gameover-retry.png' });
+  const over = await canvasPrint(frame);
+  // RETRY con Invio: la gara riparte subito, senza pubblicità da aspettare.
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(900);
+  expect(await canvasPrint(frame)).not.toBe(over);
+  await page.screenshot({ path: 'e2e/out/crazygames-retry-race.png' });
 
   expect(seen.errors).toEqual([]);
   expect(seen.failed).toEqual([]);
   expect(seen.outside).toEqual([]);
-  expect(await frame.evaluate(() => (window as unknown as { __fullscreenAsked: number }).__fullscreenAsked)).toBe(0);
+  expect(await fullscreenAsked(frame)).toBe(0);
 });
 
 const { defaultBrowserType: _ignored, ...phone } = devices['iPhone 13 landscape'];
@@ -202,6 +362,7 @@ test.describe('touch', () => {
 
   test('phone: title, radio, TILT without sensor permission, and the race by finger', async ({ page }) => {
     const seen = watch(page);
+    await sdk(page, 'absent');
     await blockStorageAndSpyFullscreen(page);
     const frame = await gameFrame(page);
     const k = (await frame.locator('#game').boundingBox())!.width / 1280;

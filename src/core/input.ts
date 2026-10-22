@@ -1,6 +1,7 @@
 import type { Actions } from '../types';
 
-type ActionName = keyof Actions;
+// Il clic del mouse (`click`) porta un punto, non un sì o un no: resta fuori.
+type ActionName = Exclude<keyof Actions, 'click'>;
 
 const HELD: readonly ActionName[] = ['accelerate', 'brake', 'left', 'right'];
 // Le altre (gearToggle, modeToggle, confirm, back, mute, pause) sono momentanee:

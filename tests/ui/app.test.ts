@@ -70,7 +70,7 @@ describe('createApp', () => {
     expect(app.name).toBe('radio');
   });
 
-  test('the whole flow is navigable: title -> radio -> race -> ending -> nameEntry -> scores -> title', () => {
+  test('the whole flow is navigable: title -> radio -> race -> ending -> nameEntry -> scores -> MENU -> title', () => {
     const deps = makeDeps();
     const app = createApp(deps);
 
@@ -104,7 +104,9 @@ describe('createApp', () => {
       expect.objectContaining({ name: 'AAA', date: new Date(0).toISOString() }),
     ]);
 
-    app.update(1 / 60, { ...emptyActions(), confirm: true });
+    // Dopo le iniziali la TOP 10 offre RETRY e MENU: Esc vale MENU (dopo il mezzo secondo di guardia).
+    app.update(1, emptyActions());
+    app.update(1 / 60, { ...emptyActions(), back: true });
     expect(app.name).toBe('title');
   });
 

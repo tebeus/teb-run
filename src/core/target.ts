@@ -8,7 +8,8 @@
 // - portal: `npm run build:portal`, zip per i portali, nessuna chiamata esterna;
 // - crazygames: `npm run build:crazygames`, il portal per CrazyGames: niente
 //   pulsante dello schermo intero (lo dà il portale), niente link ABOUT né
-//   SHARE (porterebbero a tebrun.io, che ha il gioco in home: cross-promozione).
+//   SHARE (porterebbero a tebrun.io, che ha il gioco in home: cross-promozione);
+//   in più l'SDK di CrazyGames, il timer della radio e la riga dell'obiettivo.
 
 export type Target = 'private' | 'site' | 'portal' | 'crazygames';
 
@@ -41,10 +42,15 @@ export interface TargetFeatures {
   /** SHARE a fine partita: la scheda e il testo portano l'indirizzo del sito. */
   share: boolean;
   /**
-   * Il punto unico degli eventi di gioco per l'SDK di un portale
-   * (`core/gameplayEvents.ts`): oggi non chiama niente.
+   * L'SDK di CrazyGames v3 (`core/crazySdk.ts`), alimentato dal punto unico
+   * degli eventi di gioco (`core/gameplayEvents.ts`): caricamento, gara in
+   * corso o ferma, festa sui record, pubblicità fra una partita e l'altra.
    */
-  gameplayEvents: boolean;
+  portalSdk: boolean;
+  /** Sulla radio un conto alla rovescia, come nei cabinati: allo zero si parte. */
+  radioTimer: boolean;
+  /** Alla prima gara della sessione una riga che dice l'obiettivo. */
+  goalLine: boolean;
   /**
    * Il gancio di diagnostica `#debug` (`window.__tebrun`, per gli e2e): solo
    * privata e sviluppo. Nelle build pubbliche `#debug` non fa niente.
@@ -62,7 +68,9 @@ export function featuresOf(target: Target): TargetFeatures {
     fullscreenButton: target !== 'crazygames',
     aboutLink: target !== 'crazygames',
     share: target !== 'crazygames',
-    gameplayEvents: target === 'crazygames',
+    portalSdk: target === 'crazygames',
+    radioTimer: target === 'crazygames',
+    goalLine: target === 'crazygames',
   };
 }
 
@@ -90,10 +98,13 @@ export const STATS_BUILD: boolean = import.meta.env.VITE_TARGET === 'site';
  * Gli altri flag che tolgono codice, come `STATS_BUILD`: confronti letterali
  * che il bundler risolve, così nella build crazygames spariscono il codice
  * dello schermo intero (`requestFullscreen`), l'indirizzo di ABOUT e la
- * scheda di SHARE con l'indirizzo del sito, e nelle altre build il punto
- * degli eventi di gioco. Valgono sempre quanto i flag di `FEATURES` (test).
+ * scheda di SHARE con l'indirizzo del sito, e nelle altre build l'SDK di
+ * CrazyGames (col suo indirizzo), il timer della radio e la riga
+ * dell'obiettivo. Valgono sempre quanto i flag di `FEATURES` (test).
  */
 export const FULLSCREEN_BUILD: boolean = import.meta.env.VITE_TARGET !== 'crazygames';
 export const ABOUT_BUILD: boolean = import.meta.env.VITE_TARGET !== 'crazygames';
 export const SHARE_BUILD: boolean = import.meta.env.VITE_TARGET !== 'crazygames';
-export const GAMEPLAY_EVENTS_BUILD: boolean = import.meta.env.VITE_TARGET === 'crazygames';
+export const SDK_BUILD: boolean = import.meta.env.VITE_TARGET === 'crazygames';
+export const RADIO_TIMER_BUILD: boolean = import.meta.env.VITE_TARGET === 'crazygames';
+export const GOAL_LINE_BUILD: boolean = import.meta.env.VITE_TARGET === 'crazygames';

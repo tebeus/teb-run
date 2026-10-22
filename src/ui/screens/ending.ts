@@ -7,6 +7,10 @@ import type { ScreenDeps } from '../deps';
 import { go, type Screen, type ScreenPayloads, type Transition } from '../fsm';
 import { shareResultFrom } from '../share';
 import { drawText, drawTextOutlined } from '../text';
+import { GAMEPLAY } from '../../core/gameplayEvents';
+import { SDK_BUILD } from '../../core/target';
+import { bestLine, drawContinueButton, drawRetryMenu, initialRetryMenu, personalBest, RETRY_ROW_TOP, type RetryMenuState } from '../retryMenu';
+import { gameOverLines, nameEntryPayload, stepEndOfGame } from './gameOver';
 
 export const ENDING_DURATION_S = 8;
 /**
@@ -27,6 +31,8 @@ export interface EndingState {
   t: number;
   payload: EndingPayload;
   qualifies: boolean;
+  /** RETRY e MENU, quando il punteggio non entra in classifica. Assente vale appena aperto. */
+  menu?: RetryMenuState;
 }
 
 /** Valida il payload di ending; con dati mancanti o malformati usa `fallbackStage` e punteggio/percorso vuoti. Pura. */
@@ -38,39 +44,20 @@ export function parseEndingPayload(payload: unknown, fallbackStage: StageDef): E
     stage: p?.stage ?? fallbackStage,
     route: Array.isArray(p?.route) ? p.route : [],
     ...(typeof p?.time === 'number' ? { time: p.time } : {}),
+    ...(typeof p?.song === 'number' ? { song: p.song } : {}),
   };
 }
 
-/**
- * ENTER o il tempo scaduto porta a nameEntry se il punteggio entra in
- * classifica, altrimenti a scores. Con `hold` (dopo SHARE) il tempo non
- * scade: si aspetta ENTER. Pura.
- */
+/** Il finale: come il game over (`stepEndOfGame`), con il suo tempo. Pura. */
 export function stepEnding(
   state: EndingState,
   dt: number,
   actions: Actions,
   hold = false,
+  tap: { x: number; y: number } | null = null,
 ): { state: EndingState; transition: Transition | null } {
-  const t = state.t + dt;
-  // +1e-9: la stessa tolleranza di core/loop.ts, per non perdere la soglia
-  // per un residuo di virgola mobile dopo molte somme di dt piccoli.
-  const timeUp = !hold && t + 1e-9 >= ENDING_DURATION_S;
-
-  if (actions.confirm || timeUp) {
-    if (state.qualifies) {
-      return {
-        state: { ...state, t },
-        transition: go('nameEntry', {
-          score: state.payload.score,
-          stageId: state.payload.stage.id,
-          route: state.payload.route,
-        }),
-      };
-    }
-    return { state: { ...state, t }, transition: go('scores', undefined) };
-  }
-  return { state: { ...state, t }, transition: null };
+  const p = state.payload;
+  return stepEndOfGame(state, dt, actions, hold, tap, ENDING_DURATION_S, () => go('nameEntry', nameEntryPayload(p)), p.song ?? 0);
 }
 
 /**
@@ -126,12 +113,21 @@ export function createEndingScreen(deps: ScreenDeps): Screen {
   };
   /** Calcolato una volta in `enter`: il percorso non cambia dentro la schermata. */
   let visited: string[] = visitedStages(state.payload.route);
+  /** Sopra RETRY: la tappa raggiunta e il record personale (di prima di questa partita). */
+  let stageText = '';
+  let bestText = '';
 
   return {
     enter(payload) {
       const parsed = parseEndingPayload(payload, deps.firstStage);
-      state = { t: 0, payload: parsed, qualifies: deps.scores.qualifies(parsed.score) };
+      state = { t: 0, payload: parsed, qualifies: deps.scores.qualifies(parsed.score), menu: initialRetryMenu() };
+      // Un tocco arrivato in gara non sceglie niente qui.
+      deps.signals?.takeTap();
       visited = visitedStages(parsed.route);
+      stageText = gameOverLines(parsed).stage;
+      bestText = bestLine(parsed.score, personalBest(deps.scores.load()));
+      // La festa del portale: un finale, record o no (una volta sola).
+      if (SDK_BUILD) GAMEPLAY.celebrate();
       // Spec §10: "finale = fanfara 8 note". Nessun altro la suona.
       deps.audio.sfx('fanfare');
       deps.share?.offer(shareResultFrom('ending', parsed, deps.car?.get()));
@@ -140,7 +136,7 @@ export function createEndingScreen(deps: ScreenDeps): Screen {
       deps.share?.offer(null);
     },
     update(dt, actions) {
-      const r = stepEnding(state, dt, actions, deps.share?.held() ?? false);
+      const r = stepEnding(state, dt, actions, deps.share?.held() ?? false, deps.signals?.takeTap() ?? null);
       state = r.state;
       return r.transition;
     },
@@ -223,6 +219,11 @@ export function createEndingScreen(deps: ScreenDeps): Screen {
       if (border.w > 0 && border.h > 0) {
         ctx.drawImage(border.image, 0, 0, LOGICAL_W, LOGICAL_H);
       }
+      // Sopra la cornice: la tappa e il record, poi RETRY e MENU, o CONTINUE prima delle iniziali.
+      drawTextOutlined(ctx, stageText, LOGICAL_W / 2, RETRY_ROW_TOP - 60, 2, '#ffffff', 'center');
+      drawTextOutlined(ctx, bestText, LOGICAL_W / 2, RETRY_ROW_TOP - 36, 3, '#ffee55', 'center');
+      if (state.qualifies) drawContinueButton(ctx);
+      else drawRetryMenu(ctx, state.menu ?? initialRetryMenu(), deps.device?.() ?? 'keyboard');
     },
   };
 }

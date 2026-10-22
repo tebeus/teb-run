@@ -35,7 +35,7 @@ import {
 } from './radioTouch';
 import { drawTextOutlined, measureText } from './text';
 
-export type ActionName = keyof Actions;
+export type ActionName = Exclude<keyof Actions, 'click'>;
 
 export interface TouchButton {
   id: string;
@@ -194,7 +194,9 @@ export function touchLayout(screen: ScreenName, opts: LayoutOptions): TouchButto
       ];
     case 'gameOver':
     case 'ending':
-      return [{ id: 'continue', rect: r(1010, 620, 250, 84), action: 'confirm', kind: 'tap', label: 'CONTINUE' }];
+      // RETRY e MENU (o CONTINUE) li disegnano e li toccano le schermate
+      // stesse (`retryMenu.ts`, con `signals.takeTap`): qui niente.
+      return [];
     case 'scores':
       return [{ id: 'skip', rect: r(0, 0, LOGICAL_W, LOGICAL_H), action: 'confirm', kind: 'tap', hidden: true }];
     default:
@@ -419,6 +421,20 @@ export interface TouchOptions {
   now?: () => number;
 }
 
+/** Le schermate i cui pulsanti si vedono e si cliccano anche col mouse. */
+export const MOUSE_BUTTON_SCREENS: readonly ScreenName[] = ['nameEntry'];
+
+/**
+ * Le azioni di un clic del mouse sui pulsanti di `screen` (solo quelle di
+ * `MOUSE_BUTTON_SCREENS`): vere per il solo tick del clic, che per i
+ * riduttori a fronte di salita vale una pressione. Pura.
+ */
+export function mouseButtonActions(screen: ScreenName, p: LogicalPoint | null | undefined): Partial<Record<ActionName, boolean>> {
+  if (p == null || !MOUSE_BUTTON_SCREENS.includes(screen)) return {};
+  const b = touchLayout(screen, { tiltAvailable: false, tiltOn: false, cssPerLogical: 1 }).find((x) => inside(x.rect, p.x, p.y));
+  return b === undefined || b.action === 'tilt' ? {} : { [b.action]: true };
+}
+
 /** Di quanto (in frazione) deve cambiare la larghezza del canvas perché un `resize` lasci andare le dita. */
 export const RESIZE_RELEASE = 0.15;
 
@@ -548,7 +564,9 @@ export function createTouchControls(opts: TouchOptions): TouchControls {
     },
     notices,
     draw(ctx) {
-      if (device() !== 'touch' || isBlocked()) return;
+      // Le iniziali hanno i pulsanti anche su computer: il mouse li clicca
+      // (`screens/nameEntry.ts`), così chi gioca solo col mouse non resta fermo.
+      if (isBlocked() || (device() !== 'touch' && !MOUSE_BUTTON_SCREENS.includes(screen()))) return;
       const buttons = layout();
       const kk = k();
       const down = new Set<string>();

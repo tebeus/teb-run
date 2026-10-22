@@ -140,6 +140,13 @@ describe('CSP per build target (statistics only in the site build)', () => {
     expect(site.split(STATS_ORIGIN).length - 1).toBe(2);
   });
 
+  test('crazygames: no origin limits, so the SDK can load the portal ads; object-src and base-uri stay closed', async () => {
+    const { CRAZYGAMES_CSP } = await import('../../vite.config');
+    expect(cspForTarget(cspContent(), 'crazygames')).toBe("object-src 'none'; base-uri 'self'");
+    expect(indexHtmlForTarget(INDEX, 'crazygames')).toContain(`content="${CRAZYGAMES_CSP}"`);
+    expect(indexHtmlForTarget(INDEX, 'crazygames')).not.toContain("script-src 'self'");
+  });
+
   test('applying it twice changes nothing', () => {
     const once = cspForTarget(cspContent(), 'site');
     expect(cspForTarget(once, 'site')).toBe(once);

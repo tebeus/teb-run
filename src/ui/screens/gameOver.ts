@@ -14,6 +14,20 @@ import type { ScreenDeps } from '../deps';
 import { go, type Screen, type ScreenPayloads, type Transition } from '../fsm';
 import { shareResultFrom } from '../share';
 import { drawTextOutlined, measureText } from '../text';
+import { GAMEPLAY } from '../../core/gameplayEvents';
+import { SDK_BUILD } from '../../core/target';
+import {
+  bestLine,
+  isNewBest,
+  personalBest,
+  continueChosen,
+  drawContinueButton,
+  drawRetryMenu,
+  initialRetryMenu,
+  RETRY_ROW_TOP,
+  stepRetryMenu,
+  type RetryMenuState,
+} from '../retryMenu';
 
 export const GAME_OVER_DURATION_S = 3;
 
@@ -23,6 +37,8 @@ export interface GameOverState {
   t: number;
   payload: GameOverPayload;
   qualifies: boolean;
+  /** RETRY e MENU, quando il punteggio non entra in classifica. Assente vale appena aperto. */
+  menu?: RetryMenuState;
 }
 
 /** Valida il payload di game over; con dati mancanti o malformati usa `fallbackStage` e punteggio/percorso vuoti. Pura. */
@@ -33,39 +49,57 @@ export function parseGameOverPayload(payload: unknown, fallbackStage: StageDef):
     stage: p?.stage ?? fallbackStage,
     route: Array.isArray(p?.route) ? p.route : [],
     ...(typeof p?.time === 'number' ? { time: p.time } : {}),
+    ...(typeof p?.song === 'number' ? { song: p.song } : {}),
   };
 }
 
 /**
- * ENTER o il tempo scaduto porta a nameEntry se il punteggio entra in
- * classifica, altrimenti a scores. Con `hold` (dopo SHARE) il tempo non
- * scade: si aspetta ENTER. Pura.
+ * Fine partita, comune a game over e finali. Se il punteggio entra in
+ * classifica: CONTINUE (ENTER, o tocco o clic sul pulsante) o il tempo
+ * scaduto portano alle iniziali; con `hold` (dopo SHARE) il tempo non scade.
+ * Altrimenti RETRY e MENU, senza tempo: RETRY riparte subito con lo stesso
+ * brano (auto e modalità sono quelle salvate), MENU torna al titolo. `tap`
+ * è il tocco o il clic del tick. Pura.
  */
+export function stepEndOfGame<S extends { t: number; qualifies: boolean; menu?: RetryMenuState }>(
+  state: S,
+  dt: number,
+  actions: Actions,
+  hold: boolean,
+  tap: { x: number; y: number } | null,
+  duration: number,
+  toNameEntry: () => Transition,
+  song: number,
+): { state: S; transition: Transition | null } {
+  const t = state.t + dt;
+  if (state.qualifies) {
+    // +1e-9: la stessa tolleranza di core/loop.ts, per non perdere la soglia
+    // per un residuo di virgola mobile dopo molte somme di dt piccoli.
+    const timeUp = !hold && t + 1e-9 >= duration;
+    return { state: { ...state, t }, transition: continueChosen(actions, tap) || timeUp ? toNameEntry() : null };
+  }
+  const r = stepRetryMenu(state.menu ?? { ...initialRetryMenu(), t: state.t }, dt, actions, tap);
+  const next = { ...state, t, menu: r.state };
+  if (r.chosen === 'retry') return { state: next, transition: go('race', { song }) };
+  if (r.chosen === 'menu') return { state: next, transition: go('title', undefined) };
+  return { state: next, transition: null };
+}
+
+/** Il game over: vedi `stepEndOfGame`. Pura. */
 export function stepGameOver(
   state: GameOverState,
   dt: number,
   actions: Actions,
   hold = false,
+  tap: { x: number; y: number } | null = null,
 ): { state: GameOverState; transition: Transition | null } {
-  const t = state.t + dt;
-  // +1e-9: la stessa tolleranza di core/loop.ts, per non perdere la soglia
-  // per un residuo di virgola mobile dopo molte somme di dt piccoli.
-  const timeUp = !hold && t + 1e-9 >= GAME_OVER_DURATION_S;
+  const p = state.payload;
+  return stepEndOfGame(state, dt, actions, hold, tap, GAME_OVER_DURATION_S, () => go('nameEntry', nameEntryPayload(p)), p.song ?? 0);
+}
 
-  if (actions.confirm || timeUp) {
-    if (state.qualifies) {
-      return {
-        state: { ...state, t },
-        transition: go('nameEntry', {
-          score: state.payload.score,
-          stageId: state.payload.stage.id,
-          route: state.payload.route,
-        }),
-      };
-    }
-    return { state: { ...state, t }, transition: go('scores', undefined) };
-  }
-  return { state: { ...state, t }, transition: null };
+/** Il payload delle iniziali da un risultato di fine partita: il brano viaggia con lui. Pura. */
+export function nameEntryPayload(p: { score: number; stage: StageDef; route: ('L' | 'R')[]; song?: number }): ScreenPayloads['nameEntry'] {
+  return { score: p.score, stageId: p.stage.id, route: p.route, ...(p.song === undefined ? {} : { song: p.song }) };
 }
 
 /** Fondo dove l'illustrazione non arriva (letterbox): il blu del mare della mappa. */
@@ -96,12 +130,16 @@ function centredTextRect(text: string, y: number, scale: number): MapRect {
   return { x: LOGICAL_W / 2 - w / 2 - 1, y: y - 1, w: w + 2, h: GLYPH * scale + 2 };
 }
 
-/** Le righe di testo in alto: il titolo, il punteggio, la tappa raggiunta. Pura. */
-export function gameOverLines(payload: GameOverPayload): { title: string; score: string; stage: string } {
+/**
+ * Le righe di testo in alto: il titolo, il punteggio col record personale
+ * (`best`, prima di questa partita; assente, niente record), la tappa
+ * raggiunta. Pura.
+ */
+export function gameOverLines(payload: GameOverPayload, best?: number): { title: string; score: string; stage: string } {
   const level = Number(/^(\d)-/.exec(payload.stage.id)?.[1] ?? 0);
   return {
     title: 'GAME OVER',
-    score: `SCORE ${payload.score}`,
+    score: best === undefined ? `SCORE ${payload.score}` : `SCORE ${payload.score}   ${bestLine(payload.score, best)}`,
     stage: `STAGE ${level + 1}  ${payload.stage.name}`.toUpperCase(),
   };
 }
@@ -112,13 +150,14 @@ export function gameOverLines(payload: GameOverPayload): { title: string; score:
  * tappe, largo 1000 px (78% della larghezza), senza che nessuna riga di
  * testo entri nel suo riquadro. Pura.
  */
-export function gameOverLayout(payload: GameOverPayload): GameOverLayout {
-  const lines = gameOverLines(payload);
+export function gameOverLayout(payload: GameOverPayload, best?: number): GameOverLayout {
+  const lines = gameOverLines(payload, best);
   const title = centredTextRect(lines.title, 22, TITLE_SCALE);
   const score = centredTextRect(lines.score, 104, SCORE_SCALE);
   const stage = centredTextRect(lines.stage, 148, STAGE_SCALE);
   const top = stage.y + stage.h + 20;
-  const map = { x: 140, y: top, w: 1000, h: LOGICAL_H - 16 - top };
+  // In basso la fila di RETRY e MENU (o CONTINUE): la mappa si ferma sopra.
+  const map = { x: 140, y: top, w: 1000, h: RETRY_ROW_TOP - 12 - top };
   return { title, score, stage, map };
 }
 
@@ -161,10 +200,16 @@ export function createGameOverScreen(deps: ScreenDeps): Screen {
   return {
     enter(payload) {
       const parsed = parseGameOverPayload(payload, deps.firstStage);
-      state = { t: 0, payload: parsed, qualifies: deps.scores.qualifies(parsed.score) };
+      state = { t: 0, payload: parsed, qualifies: deps.scores.qualifies(parsed.score), menu: initialRetryMenu() };
+      // Un tocco arrivato in gara non sceglie niente qui.
+      deps.signals?.takeTap();
       visited = visitedStages(parsed.route);
-      layout = gameOverLayout(parsed);
-      lines = gameOverLines(parsed);
+      // Il record di prima: la partita entra in classifica solo dopo le iniziali.
+      const best = personalBest(deps.scores.load());
+      // La festa del portale su un nuovo record (non sul primo punteggio di tutti).
+      if (SDK_BUILD && best > 0 && isNewBest(parsed.score, best)) GAMEPLAY.celebrate();
+      layout = gameOverLayout(parsed, best);
+      lines = gameOverLines(parsed, best);
       labels = stageLabels(visited, layout.map, parsed.stage);
       deps.share?.offer(shareResultFrom('gameOver', parsed, deps.car?.get()));
     },
@@ -172,7 +217,7 @@ export function createGameOverScreen(deps: ScreenDeps): Screen {
       deps.share?.offer(null);
     },
     update(dt, actions) {
-      const r = stepGameOver(state, dt, actions, deps.share?.held() ?? false);
+      const r = stepGameOver(state, dt, actions, deps.share?.held() ?? false, deps.signals?.takeTap() ?? null);
       state = r.state;
       return r.transition;
     },
@@ -190,6 +235,8 @@ export function createGameOverScreen(deps: ScreenDeps): Screen {
       drawTextOutlined(ctx, lines.title, LOGICAL_W / 2, layout.title.y + 1, TITLE_SCALE, '#ff3333', 'center');
       drawTextOutlined(ctx, lines.score, LOGICAL_W / 2, layout.score.y + 1, SCORE_SCALE, '#ffee55', 'center');
       drawTextOutlined(ctx, lines.stage, LOGICAL_W / 2, layout.stage.y + 1, STAGE_SCALE, '#ffffff', 'center');
+      if (state.qualifies) drawContinueButton(ctx);
+      else drawRetryMenu(ctx, state.menu ?? initialRetryMenu(), deps.device?.() ?? 'keyboard');
       ctx.restore();
     },
   };

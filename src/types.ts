@@ -181,6 +181,12 @@ export interface Actions {
    * prima della pausa restano validi.
    */
   pause?: boolean;
+  /**
+   * Il clic del mouse sul canvas in questo tick, in pixel logici (`ui/mouse.ts`),
+   * o null. Solo il mouse: le dita passano da `ui/touch.ts`. Titolo, radio e
+   * TOP 10 lo leggono; le altre schermate lo ignorano. Opzionale, come `pause`.
+   */
+  click?: { x: number; y: number } | null;
 }
 
 export type Gear = 'lo' | 'hi';
@@ -448,6 +454,14 @@ export interface AudioBus {
   /** Ritorna true se ora è muto. */
   toggleMute(): boolean;
   readonly muted: boolean;
+  /**
+   * Muto da fuori, indipendente da M (`audio/context.ts`): `'ad'` mentre il
+   * portale mostra una pubblicità, `'portal'` finché la sua impostazione
+   * `muteAudio` lo chiede. Si sente solo se nessuno dei tre dice muto; `muted`
+   * resta quello di M, così alla ripresa M è come prima. Opzionale come
+   * `setRain`: chi la chiama scrive `deps.audio.setHostMute?.(…)`.
+   */
+  setHostMute?(reason: 'ad' | 'portal', on: boolean): void;
   /**
    * false se AudioContext è assente o negato: il gioco gira muto e l'HUD mostra
    * l'icona "no audio". `toggleMute` in quel caso non cambia nulla e ritorna true.

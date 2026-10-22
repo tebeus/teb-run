@@ -18,6 +18,8 @@ import {
   MAX_INITIAL_BYTES,
   MAX_TOTAL_BYTES,
   nameProblems,
+  outsideOrigins,
+  sdkProblems,
   weightProblems,
   // @ts-expect-error strumento in JavaScript senza tipi
 } from '../../tools/check-builds.mjs';
@@ -128,6 +130,28 @@ describe('crazyGamesProblems: no cross-promotion, no fullscreen code (CrazyGames
     expect(crazyGamesProblems('`SHARE NOT AVAILABLE`')).toEqual(['names SHARE NOT AVAILABLE']);
   });
 
+  test('no rewarded ads and no banners', () => {
+    expect(crazyGamesProblems('requestAd("rewarded",x)')).toEqual(['names rewarded']);
+    expect(crazyGamesProblems('sdk.banner.requestBanner(b)')).toEqual(['names requestBanner']);
+  });
+
+  test('the only outside origin is the SDK one (the privacy address is the site domain, checked above)', () => {
+    expect(outsideOrigins('s.src=`https://sdk.crazygames.com/crazygames-sdk-v3.js`;c=`https://${d}`')).toEqual([]);
+    expect(outsideOrigins('fetch("https://cdn.example.com/x.js");img="http://ads.example.org"')).toEqual([
+      'https://cdn.example.com',
+      'http://ads.example.org',
+    ]);
+  });
+
+  test('site and portal: any trace of the CrazyGames SDK or its ads fails', () => {
+    expect(sdkProblems('const a=1;')).toEqual([]);
+    expect(sdkProblems('src=`https://sdk.crazygames.com/crazygames-sdk-v3.js`')).toEqual([
+      'names sdk.crazygames.com (the CrazyGames SDK)',
+      'names crazygames-sdk (the CrazyGames SDK)',
+    ]);
+    expect(sdkProblems('e.ad.requestAd(`midgame`,c)')).toEqual(['names requestAd (the CrazyGames SDK)', 'names midgame (the CrazyGames SDK)']);
+  });
+
   test('more than 1500 files fail', () => {
     const dir = mkdtempSync(join(tmpdir(), 'check-files-'));
     try {
@@ -218,6 +242,20 @@ describe('site, portal and crazygames, built for real', () => {
     expect(crazyGamesProblems(portal)).toEqual(['names requestFullscreen', 'names /about/', 'names SHARE NOT AVAILABLE']);
   });
 
+  test('crazygames carries the SDK and no other outside origin; site and portal carry none of it', () => {
+    const js = (target: string): string =>
+      readdirSync(join(dir, target, 'assets'))
+        .filter((name) => name.endsWith('.js'))
+        .map((name) => read(join(dir, target, 'assets', name)))
+        .join('\n');
+    expect(js('crazygames')).toContain('https://sdk.crazygames.com/crazygames-sdk-v3.js');
+    expect(outsideOrigins(js('crazygames'))).toEqual([]);
+    expect(sdkProblems(js('site'))).toEqual([]);
+    expect(sdkProblems(js('portal'))).toEqual([]);
+    // Il controllo morde: sul crazygames trova l'SDK.
+    expect(sdkProblems(js('crazygames')).length).toBeGreaterThan(0);
+  });
+
   test.skipIf(NO_ART)('the sprites ship as WebP only, and the manifest names files that are there', () => {
     for (const target of ['site', 'portal', 'crazygames']) {
       const sprites = readdirSync(join(dir, target, 'sprites'));
@@ -249,7 +287,9 @@ describe('site, portal and crazygames, built for real', () => {
     expect(csp('site')).toContain("connect-src 'self' https://tebrun.goatcounter.com");
     expect(csp('site')).toContain("img-src 'self' https://tebrun.goatcounter.com");
     expect(csp('portal')).not.toContain('goatcounter');
-    expect(csp('crazygames')).toBe(csp('portal'));
+    expect(csp('crazygames')).not.toContain('goatcounter');
+    // crazygames: senza limiti sulle origini, per la pubblicità che l'SDK carica dal portale.
+    expect(csp('crazygames')).toBe("object-src 'none'; base-uri 'self'");
   });
 
   test('the personal radio manifest ships empty', () => {

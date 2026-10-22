@@ -220,10 +220,12 @@ export function drawShareButton(ctx: CanvasRenderingContext2D, r: Rect, busy: bo
 export interface ShareUi {
   /** Da chiamare dopo `app.render`, a ogni fotogramma. */
   draw(ctx: CanvasRenderingContext2D): void;
+  /** Il punto logico è sul pulsante SHARE? Lì il clic non va alle schermate. */
+  hits(p: { x: number; y: number }): boolean;
 }
 
 /** Nessun pulsante, nessun tasto: la build senza SHARE. */
-export const NO_SHARE_UI: ShareUi = { draw: () => undefined };
+export const NO_SHARE_UI: ShareUi = { draw: () => undefined, hits: () => false };
 
 /**
  * Collega tasto S e clic/tocco sul pulsante. La scheda si prepara appena una
@@ -295,6 +297,7 @@ export function installShareUi(
   });
 
   return {
+    hits: (p) => hit(p.x, p.y),
     draw(ctx) {
       if (!showing()) return;
       const b = SHARE_BUTTON;

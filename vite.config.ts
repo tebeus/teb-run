@@ -51,6 +51,18 @@ export function publicFileAllowed(rel: string, target: Target): boolean {
 }
 
 /**
+ * La CSP della build crazygames: senza limiti sulle origini. L'SDK di
+ * CrazyGames (`core/crazySdk.ts`) gira dentro l'iframe del gioco e, sul
+ * portale, vi carica lo script delle pubblicità da un indirizzo che gli dà il
+ * portale stesso (`loadAdsIfNeeded`), oltre a mandare le sue statistiche: con
+ * `script-src 'self'` la pubblicità fra due partite non partirebbe mai.
+ * Restano le due direttive che non toccano niente di tutto questo. Il gioco
+ * stesso non carica niente da fuori tranne lo script dell'SDK: lo controlla
+ * `check:builds` sui file della build.
+ */
+export const CRAZYGAMES_CSP = "object-src 'none'; base-uri 'self'";
+
+/**
  * La CSP di `target` a partire da quella di index.html (`base`): la build site
  * aggiunge l'origine delle statistiche a connect-src (sendBeacon) e a img-src
  * (il ripiego con un'immagine), e a nient'altro; private e portal tengono
@@ -58,6 +70,7 @@ export function publicFileAllowed(rel: string, target: Target): boolean {
  * default-src che sostituisce. Pura.
  */
 export function cspForTarget(base: string, target: Target): string {
+  if (target === 'crazygames') return CRAZYGAMES_CSP;
   if (target !== 'site') return base;
   const directives = base
     .split(';')
@@ -72,13 +85,13 @@ export function cspForTarget(base: string, target: Target): string {
 }
 
 /**
- * Una pagina con la CSP del bersaglio nel <meta>. Senza <meta> la build site
- * si ferma (index.html deve averlo); private e portal la lasciano com'è, così
+ * Una pagina con la CSP del bersaglio nel <meta>. Senza <meta> le build site
+ * e crazygames si fermano (index.html deve averlo); private e portal la lasciano com'è, così
  * le pagine di sviluppo (dev/*.html, senza CSP) restano servite. Pura.
  */
 export function indexHtmlForTarget(html: string, target: Target): string {
   const re = /(<meta\s+http-equiv="Content-Security-Policy"\s+content=")([^"]+)(")/;
-  if (target !== 'site') return html;
+  if (target !== 'site' && target !== 'crazygames') return html;
   if (!re.test(html)) throw new Error('index.html: no Content-Security-Policy meta tag');
   return html.replace(re, (_m, a: string, csp: string, b: string) => `${a}${cspForTarget(csp, target)}${b}`);
 }

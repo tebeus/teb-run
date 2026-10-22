@@ -9,7 +9,8 @@ import { createLoop } from './core/loop';
 import { createSystemSignals } from './core/signals';
 import { STATS_ENABLED, STATS_ENDPOINT } from './core/config';
 import { browserStatsEnv, createStats, NO_STATS, STAT_EVENTS, trackRace } from './core/stats';
-import { debugHookOn, FEATURES, STATS_BUILD } from './core/target';
+import { debugHookOn, FEATURES, SDK_BUILD, STATS_BUILD } from './core/target';
+import { AD_ENV, GAMEPLAY, PORTAL_SDK } from './core/gameplayEvents';
 import { createTilt } from './core/tilt';
 import { carFromSearch } from './game/car';
 import { modeFromSearch, modeGraph, withMode } from './game/mode';
@@ -26,6 +27,8 @@ import { createShareSlot, installShareUi } from './ui/share';
 import { startLoadingScreen } from './ui/loading';
 import { createRotateGuard, guardSignals } from './ui/rotate';
 import { createTouchControls } from './ui/touch';
+import { createMouseClicks } from './ui/mouse';
+import { overEndButtons } from './ui/retryMenu';
 import type { Fsm } from './ui/fsm';
 import type { AssetStore, AudioBus, CarChoice, Difficulty, RaceEngine, RaceSnapshot } from './types';
 import type { AudioSampleKind } from './audio/offline';
@@ -111,6 +114,13 @@ async function main(): Promise<void> {
   const first = graph.first();
   const assets = loadAssets({ start: { stage: { id: first.id, theme: first.theme }, car: car.get() } });
   const audio = createAudioBus();
+  // L'SDK di CrazyGames (solo build crazygames): si carica in background e
+  // il gioco non lo aspetta mai. Il suo `muteAudio` zittisce il gioco.
+  if (SDK_BUILD) {
+    PORTAL_SDK.start((on) => audio.setHostMute?.('portal', on));
+    PORTAL_SDK.loading(true);
+    AD_ENV.mute = (on) => audio.setHostMute?.('ad', on);
+  }
   // Modalità (collaudo utente: due livelli di difficoltà): `?mode=normal|hard`
   // vince su quella ricordata; senza nessuna delle due è NORMAL.
   const mode = createDefaultModeSetting(modeFromSearch(window.location.search));
@@ -126,6 +136,8 @@ async function main(): Promise<void> {
   // Tocchi sul canvas e perdita del fuoco, per il menu di pausa (lancio, punto 5).
   // In verticale sul telefono niente tocchi al gioco, e la gara va in pausa (lancio, punto 14).
   const signals = guardSignals(createSystemSignals(window, document, canvas));
+  // Una pubblicità cominciata a gara partita (l'SDK in ritardo): la pausa.
+  if (SDK_BUILD) AD_ENV.interrupt = () => signals.raiseFocusLost();
   // Tastiera, gamepad o tocco: i comandi a schermo seguono l'ultimo usato (lancio, punti 7 e 14).
   const device = createDeviceTracker(window);
   const rotate = createRotateGuard(window, device.current, () => signals.raiseFocusLost());
@@ -139,6 +151,7 @@ async function main(): Promise<void> {
   const stopLoading = startLoadingScreen(ctx, assets);
   await assets.ready;
   stopLoading();
+  if (SDK_BUILD) PORTAL_SDK.loading(false);
   // Segni per chi misura (e2e/weight.spec.ts): fine della fase iniziale e
   // fine del background, nel Resource Timing e sul <html>. Nessun dato.
   markAssetPhase('initial');
@@ -173,6 +186,8 @@ async function main(): Promise<void> {
     device: device.current,
     // Ricordato acceso e in attesa del permesso conta già come acceso, come per i pulsanti.
     tiltOn: () => tilt.on || tilt.pending,
+    tiltAsking: () => tilt.asking === true,
+    ...(SDK_BUILD ? { inputLocked: () => GAMEPLAY.adRunning() } : {}),
     raceFactory: (stage, a) => {
       // La modalità si legge qui, alla partenza: la radio la cambia solo
       // prima della gara, e il motore la trova nelle tappe del grafo.
@@ -231,8 +246,22 @@ async function main(): Promise<void> {
     blocked: rotate.blocked,
   });
 
+  // Il clic del mouse (titolo, radio, TOP 10): dopo launchUi e share, che
+  // tengono per sé i clic sui loro comandi.
+  const mouse = createMouseClicks({
+    win: window,
+    canvas,
+    screen: () => app.name,
+    ignore: (p) => launchUi.hits(p) || shareUi.hits(p),
+    pointerOver: (screen, p) => (screen === 'gameOver' || screen === 'ending') && overEndButtons(p),
+  });
+
   createLoop({
-    update: (dt) => app.update(dt, mergeActions(input.poll(), touch.poll())),
+    update: (dt) => {
+      const actions = mergeActions(input.poll(), touch.poll());
+      actions.click = mouse.poll();
+      app.update(dt, actions);
+    },
     render: () => {
       app.render(ctx);
       launchUi.draw(ctx);

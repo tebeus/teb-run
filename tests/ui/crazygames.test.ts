@@ -101,7 +101,7 @@ async function installFor(target: 'portal' | 'crazygames', screen: ScreenName) {
     { label: 'PRIVACY', url: config.PRIVACY_URL },
     { label: 'ABOUT', url: config.ABOUT_URL },
   ]);
-  return { launch, share, config, page, rec, fullRow };
+  return { launch, share, config, page, rec, fullRow, shareUi };
 }
 
 afterEach(() => {
@@ -137,6 +137,18 @@ describe('crazygames build: title', () => {
     expect(page.opened).toEqual([[config.PRIVACY_URL, '_blank', 'noopener,noreferrer']]);
   });
 
+  test('the mouse leaves the links and the fullscreen button to launchUi (hits), and nothing else', async () => {
+    for (const target of ['portal', 'crazygames'] as const) {
+      const { launch, fullRow } = await installFor(target, 'title');
+      // The real one, not the fake page: hits() reads the canvas box.
+      const ui = launch.installLaunchUi(fakePage().win, fakePage().canvas, () => 'title');
+      const fs = launch.fullscreenButtonRect();
+      expect(ui.hits({ x: fullRow[0].x + 4, y: fullRow[0].y + 4 })).toBe(true);
+      expect(ui.hits({ x: fs.x + fs.w / 2, y: fs.y + fs.h / 2 })).toBe(target === 'portal');
+      expect(ui.hits({ x: 640, y: 300 })).toBe(false);
+    }
+  });
+
   test('control: in portal F asks for fullscreen', async () => {
     const { page } = await installFor('portal', 'title');
     page.key('KeyF');
@@ -159,8 +171,10 @@ describe('crazygames build: end of the game', () => {
 
   for (const screen of ['gameOver', 'ending'] as const) {
     test(`control: portal draws SHARE on ${screen}, and S copies the text with the site address`, async () => {
-      const { share, config, page, rec } = await installFor('portal', screen);
+      const { share, config, page, rec, shareUi } = await installFor('portal', screen);
       expect(opsIn(rec.ops, share.SHARE_BUTTON).length).toBeGreaterThan(0);
+      expect(shareUi.hits({ x: share.SHARE_BUTTON.x + 9, y: share.SHARE_BUTTON.y + 9 })).toBe(true);
+      expect(shareUi.hits({ x: 640, y: 300 })).toBe(false);
       await pressShare(page, share.SHARE_BUTTON);
       expect(page.copied).toHaveLength(1);
       expect(page.copied[0]).toContain(config.SITE_URL);
@@ -168,6 +182,8 @@ describe('crazygames build: end of the game', () => {
 
     test(`no SHARE on ${screen}: nothing drawn, S and a click share nothing`, async () => {
       const { share, page, rec } = await installFor('crazygames', screen);
+      const b = share.SHARE_BUTTON;
+      expect(share.installShareUi(page.win, page.canvas, () => screen, share.createShareSlot(), createEmptyAssets()).hits({ x: b.x + 9, y: b.y + 9 })).toBe(false);
       expect(rec.ops).toEqual([]);
       await pressShare(page, share.SHARE_BUTTON);
       expect(page.copied).toEqual([]);

@@ -293,6 +293,9 @@ describe('createAudioBus without AudioContext', () => {
       bus.playSong(2);
       bus.stopSong();
       bus.stopSong();
+      bus.setHostMute?.('ad', true);
+      bus.setHostMute?.('ad', false);
+      bus.setHostMute?.('portal', true);
       bus.sfx('crash');
       bus.sfx('blip');
       bus.setEngine(0.5, 'hi', true);

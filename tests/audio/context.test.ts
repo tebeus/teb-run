@@ -227,6 +227,44 @@ describe('createAudioHost with a context', () => {
     expect(master.gain.ramps[1]?.value).toBe(MASTER_LEVEL);
   });
 
+  test('host mute (an ad, the portal muteAudio) and M: muted if any of the three says so; M is kept as it was', () => {
+    const host = createAudioHost({ AudioContext: fakeCtor() });
+    host.unlock();
+    const master = host.master as unknown as FakeGain;
+    const last = (): number | undefined => master.gain.ramps[master.gain.ramps.length - 1]?.value;
+    host.setHostMute('ad', true);
+    expect(last()).toBe(0);
+    expect(host.muted).toBe(false); // l'icona di M non cambia
+    host.setHostMute('ad', false);
+    expect(last()).toBe(MASTER_LEVEL);
+    // M acceso prima della pubblicità: alla fine resta muto.
+    host.toggleMute();
+    host.setHostMute('ad', true);
+    host.setHostMute('ad', false);
+    expect(last()).toBe(0);
+    expect(host.muted).toBe(true);
+    host.toggleMute();
+    expect(last()).toBe(MASTER_LEVEL);
+    // muteAudio del portale vince su M: premere M non ridà il suono.
+    host.setHostMute('portal', true);
+    host.toggleMute();
+    host.toggleMute();
+    expect(last()).toBe(0);
+    // Pubblicità durante muteAudio: alla fine resta muto finché lo chiede il portale.
+    host.setHostMute('ad', true);
+    host.setHostMute('ad', false);
+    expect(last()).toBe(0);
+    host.setHostMute('portal', false);
+    expect(last()).toBe(MASTER_LEVEL);
+  });
+
+  test('host mute before the first gesture: the context is born silent', () => {
+    const host = createAudioHost({ AudioContext: fakeCtor() });
+    host.setHostMute('portal', true);
+    host.unlock();
+    expect((host.master as unknown as FakeGain).gain.value).toBe(0);
+  });
+
   test('whenRunning fires once the context is running', () => {
     const host = createAudioHost({ AudioContext: fakeCtor() });
     let calls = 0;

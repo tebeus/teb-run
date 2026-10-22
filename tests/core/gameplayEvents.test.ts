@@ -10,7 +10,11 @@ function recorder(): { hooks: GameplayHooks; log: string[] } {
     hooks: {
       gameplayStart: () => log.push('start'),
       gameplayStop: () => log.push('stop'),
-      betweenGames: () => log.push('between'),
+      betweenGames: (done) => {
+        log.push('between');
+        done();
+      },
+      happytime: () => log.push('happy'),
     },
   };
 }
@@ -29,14 +33,31 @@ describe('gameplay events (the future portal SDK point)', () => {
     expect(log).toEqual(['start', 'stop', 'start', 'stop']);
   });
 
-  test('the next game opens with betweenGames, before its start (the midgameAd place)', () => {
+  test('nextGame: the first game of the session starts at once; from the second, betweenGames (the midgameAd) comes first', () => {
     const { hooks, log } = recorder();
     const t = createGameplayTracker(hooks);
+    t.nextGame(() => log.push('ready'));
     t.race(false);
     t.raceOver();
+    t.nextGame(() => log.push('ready'));
     t.race(false);
     t.raceOver();
-    expect(log).toEqual(['start', 'stop', 'between', 'start', 'stop']);
+    expect(log).toEqual(['ready', 'start', 'stop', 'between', 'ready', 'start', 'stop']);
+  });
+
+  test('while the ad runs adRunning is true, and ready comes once even if the SDK answers twice', () => {
+    let finish: () => void = () => undefined;
+    const t = createGameplayTracker({ ...NO_GAMEPLAY_HOOKS, betweenGames: (done) => (finish = done) });
+    let ready = 0;
+    t.nextGame(() => ready++);
+    expect(t.adRunning()).toBe(false);
+    t.nextGame(() => ready++);
+    expect(t.adRunning()).toBe(true);
+    expect(ready).toBe(1);
+    finish();
+    finish();
+    expect(t.adRunning()).toBe(false);
+    expect(ready).toBe(2);
   });
 
   test('a race that opens in pause starts nothing until the pause closes', () => {
@@ -48,17 +69,24 @@ describe('gameplay events (the future portal SDK point)', () => {
     expect(log).toEqual(['start']);
   });
 
-  test('the hooks do nothing today: no SDK in this build', () => {
+  test('celebrate is happytime', () => {
+    const { hooks, log } = recorder();
+    createGameplayTracker(hooks).celebrate();
+    expect(log).toEqual(['happy']);
+  });
+
+  test('the empty hooks do nothing', () => {
     expect(() => {
       NO_GAMEPLAY_HOOKS.gameplayStart();
       NO_GAMEPLAY_HOOKS.gameplayStop();
-      NO_GAMEPLAY_HOOKS.betweenGames();
+      NO_GAMEPLAY_HOOKS.betweenGames(() => undefined);
+      NO_GAMEPLAY_HOOKS.happytime();
     }).not.toThrow();
   });
 
-  test('the race screen reports to it only behind GAMEPLAY_EVENTS_BUILD', () => {
+  test('the race screen reports to it only behind SDK_BUILD', () => {
     const race = readFileSync(fileURLToPath(new URL('../../src/ui/screens/race.ts', import.meta.url)), 'utf8');
-    expect(race).toMatch(/if \(GAMEPLAY_EVENTS_BUILD\) GAMEPLAY\.race\(pause\.open\);/);
-    expect(race).toMatch(/if \(GAMEPLAY_EVENTS_BUILD\) GAMEPLAY\.raceOver\(\);/);
+    expect(race).toMatch(/if \(SDK_BUILD\) GAMEPLAY\.race\(pause\.open\);/);
+    expect(race).toMatch(/if \(SDK_BUILD\) GAMEPLAY\.raceOver\(\);/);
   });
 });
