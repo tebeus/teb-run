@@ -49,6 +49,8 @@ describe('the event table', () => {
       ...[1, 2, 3, 4, 5].map((n) => STAT_EVENTS.ending(n)),
       ...[...STAGES.keys()].map((id) => STAT_EVENTS.stage(id)),
       ...[...STAGES.keys()].flatMap((id) => [STAT_EVENTS.fork(id, 'L'), STAT_EVENTS.fork(id, 'R')]),
+      STAT_EVENTS.dailyStart(),
+      STAT_EVENTS.dailyEnd(),
     ];
     for (const n of names) {
       expect(n, n).toMatch(EVENT_NAME);
@@ -231,6 +233,28 @@ describe('trackRace', () => {
       'ending/3',
     ]);
     expect(e.sent.join(' ')).not.toContain('123456');
+  });
+
+  test('a daily game: daily/end once at the end (game over or finish), never the score or the initials', () => {
+    for (const end of [{ type: 'gameover', score: 4321, stage: stage('2-1') }, { type: 'finish', ending: 0, score: 4321 }] as RaceEvent[]) {
+      const e = env();
+      const s = createStats(true, STATS_ENDPOINT, e);
+      s.startGame('hard', 'retro');
+      s.event(STAT_EVENTS.dailyStart());
+      const race = trackRace(fake([[], [end]]), s, '0-0', true);
+      race.update(1 / 60, {} as never);
+      race.update(1 / 60, {} as never);
+      const sent = e.sent.map((u) => params(u).p);
+      expect(sent).toContain('daily/start');
+      expect(sent.filter((p) => p === 'daily/end')).toHaveLength(1);
+      expect(e.sent.join(' ')).not.toContain('4321');
+    }
+    const e = env();
+    const s = createStats(true, STATS_ENDPOINT, e);
+    s.startGame('normal', 'new');
+    const race = trackRace(fake([[{ type: 'finish', ending: 0, score: 1 }]]), s, '0-0');
+    race.update(1 / 60, {} as never);
+    expect(e.sent.map((u) => params(u).p)).not.toContain('daily/end');
   });
 
   test('with stats off the engine is returned untouched', () => {

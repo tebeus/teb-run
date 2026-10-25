@@ -92,8 +92,13 @@ function watchGoatCounter(page: Page): string[] {
 }
 
 /** Titolo, radio e qualche secondo di gara: una partita breve. */
-async function shortGame(page: Page, url: string): Promise<string[]> {
+async function shortGame(page: Page, url: string, api: string[] = []): Promise<string[]> {
   const errors: string[] = [];
+  // La classifica mondiale (solo site): finta, nessuna richiesta esce.
+  await page.route('https://api.tebrun.io/**', (route) => {
+    api.push(route.request().url());
+    return route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: '{"rows":[]}' });
+  });
   page.on('pageerror', (e) => errors.push(e.message));
   page.on('console', (m) => {
     if (m.type() === 'error') errors.push(m.text());
@@ -134,10 +139,12 @@ test('site build on localhost: no request at all (the user\'s own tries do not c
   expect(seen).toEqual([]);
 });
 
-test('portal build, even on a public host: no request to GoatCounter', async ({ page }) => {
+test('portal build, even on a public host: no request to GoatCounter, none to the world leaderboard', async ({ page }) => {
   const seen = watchGoatCounter(page);
   await catchHits(page);
-  const errors = await shortGame(page, `http://${FAKE_HOST}:${PORT}/game/`);
+  const api: string[] = [];
+  const errors = await shortGame(page, `http://${FAKE_HOST}:${PORT}/game/`, api);
   expect(seen).toEqual([]);
+  expect(api).toEqual([]);
   expect(errors).toEqual([]);
 });

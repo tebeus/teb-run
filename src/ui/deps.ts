@@ -7,6 +7,9 @@ import type { ScoresStore } from '../persist/scores';
 import type { SystemSignals } from '../core/signals';
 import type { ShareSlot } from './share';
 import type { InputDevice } from '../core/device';
+import type { DailySession } from './dailySession';
+import type { DailyStore, InitialsMemory } from '../persist/daily';
+import type { BoardClient } from '../net/types';
 
 /**
  * Dipendenze di cui ogni schermata ha bisogno, iniettate dal chiamante
@@ -74,4 +77,15 @@ export interface ScreenDeps {
   inputLocked?: () => boolean;
   /** La finestra del permesso dei sensori è aperta? Il timer della radio intanto si ferma. Assente vale no. */
   tiltAsking?: () => boolean;
+  /**
+   * La sfida giornaliera in corso (spec classifica e sfida, §3.3): la apre
+   * la schermata `daily`, la chiude il titolo. Assente, niente DAILY.
+   */
+  daily?: DailySession;
+  /** Il record DAILY di oggi, in locale. Assente, nessun record. */
+  dailyStore?: DailyStore;
+  /** Le ultime iniziali, da cui riparte `nameEntry`. */
+  initials?: InitialsMemory;
+  /** La classifica mondiale (solo build con `WORLD_BOARD_BUILD`). Assente, solo la TOP 10 locale. */
+  board?: BoardClient;
 }

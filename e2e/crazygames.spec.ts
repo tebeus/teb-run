@@ -26,6 +26,7 @@ import { touchLayout } from '../src/ui/touch';
 import { CONTINUE_RECT, RETRY_INPUT_DELAY_S, RETRY_RECT } from '../src/ui/retryMenu';
 import type { ScreenName } from '../src/ui/fsm';
 import type { Rect } from '../src/ui/rect';
+import { DAILY_RECT } from '../src/ui/titleLayout';
 
 /** `E2E_CRAZYGAMES_PORT` le sposta, se due copie del progetto provano insieme. */
 const GAME_PORT = Number(process.env.E2E_CRAZYGAMES_PORT ?? 5430);
@@ -348,6 +349,46 @@ test('keyboard only, no SDK: the radio starts by itself, and RETRY races at once
   expect(seen.failed).toEqual([]);
   expect(seen.outside).toEqual([]);
   expect(await fullscreenAsked(frame)).toBe(0);
+});
+
+test('DAILY in local only (no world leaderboard here), with the fake SDK: gameplay events, no initials, the local best, and the ad before the next game', async ({ page }) => {
+  const limit = STAGES.get('0-0')!.timeLimit;
+  test.setTimeout((limit + 120) * 1000);
+  const seen = watch(page);
+  await sdk(page, 'fake');
+  await blockStorageAndSpyFullscreen(page, 'top10');
+  const frame = await gameFrame(page);
+  // DAILY CHALLENGE dal titolo, col mouse (il clic dà anche il fuoco all'iframe).
+  await click(page, frame, centre(DAILY_RECT));
+  await page.waitForTimeout(1200);
+  await page.screenshot({ path: 'e2e/out/crazygames-daily.png' });
+  // ENTER sulla schermata della sfida, ENTER sulla radio.
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(800);
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout((COUNTDOWN_SECONDS + 0.5) * 1000);
+  await page.keyboard.down('ArrowUp');
+  await page.waitForTimeout(3000);
+  await page.screenshot({ path: 'e2e/out/crazygames-daily-race.png' });
+  await page.waitForTimeout((limit - 3) * 1000);
+  await page.keyboard.up('ArrowUp');
+  await page.waitForTimeout(2000 + RETRY_INPUT_DELAY_S * 1000 + 500);
+  await page.screenshot({ path: 'e2e/out/crazygames-daily-gameover.png' });
+  const calls = await sdkCalls(frame);
+  expect(calls).toContain('gameplayStart');
+  expect(calls).toContain('gameplayStop');
+  // Il primo punteggio DAILY del giorno non fa festa.
+  expect(calls).not.toContain('happytime');
+  // Il record DAILY di oggi, in locale.
+  const best = await frame.evaluate(() => JSON.parse(localStorage.getItem('tebrun.daily.v1') ?? 'null'));
+  expect(best?.best.score).toBeGreaterThan(0);
+  // Niente CONTINUE (nessuna classifica mondiale qui): RETRY, e prima della seconda partita la pubblicità.
+  await page.keyboard.press('Enter');
+  await expect.poll(() => sdkCalls(frame)).toContain('requestAd:midgame');
+  expect(seen.errors).toEqual([]);
+  expect(seen.failed).toEqual([]);
+  // Nessuna richiesta fuori dal gioco: né api.tebrun.io né altro.
+  expect(seen.outside).toEqual([]);
 });
 
 const { defaultBrowserType: _ignored, ...phone } = devices['iPhone 13 landscape'];

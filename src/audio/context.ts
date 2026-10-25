@@ -16,6 +16,27 @@ export interface AudioScope {
   /** Solo per la verifica d'ascolto del gancio #debug (spec §16). */
   OfflineAudioContext?: OfflineAudioContextCtor;
   webkitOfflineAudioContext?: OfflineAudioContextCtor;
+  /** Per `navigator.audioSession` (Safari 17, iOS 17): vedi `usePlaybackSession`. */
+  navigator?: { audioSession?: { type?: string } };
+}
+
+/**
+ * Su iPhone, con il tasto silenzioso, Safari zittisce il Web Audio: la
+ * sessione audio di una pagina è `ambient` per default. Con `playback` il
+ * gioco suona come un video (spec classifica e sfida, §5). Si chiama dentro
+ * un gesto, prima di creare o riprendere il contesto. Dove l'API non c'è
+ * (iOS prima del 17, Android, computer) non fa niente, e un setter che lancia
+ * non ferma l'audio. Effetto noto e accettato: come un video, ferma la musica
+ * delle altre app. M, `muteAudio` del portale e il muto della pubblicità
+ * agiscono sul guadagno, a valle, e continuano a vincere.
+ */
+export function usePlaybackSession(scope: AudioScope): void {
+  try {
+    const session = scope.navigator?.audioSession;
+    if (session && session.type !== 'playback') session.type = 'playback';
+  } catch {
+    // niente sessione: l'audio va come prima
+  }
 }
 
 /** Volume generale quando non si è muti. */
@@ -104,6 +125,7 @@ export function createAudioHost(
     if (ctor === null) return;
     // nuovo gesto: ha senso riprovare dopo un resume rifiutato
     resumeDenied = false;
+    usePlaybackSession(scope);
     if (ctx === null) {
       try {
         ctx = new ctor();

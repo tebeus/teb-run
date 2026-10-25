@@ -23,20 +23,9 @@ export type SurfaceKind = 'asphalt' | 'dirt' | 'snow' | 'wet';
 /** Meteo di una tappa (spec §4.4f e §9). Assente su una tappa vale `'clear'`. */
 export type Weather = 'clear' | 'rain' | 'snow' | 'dust';
 
-/**
- * Quale auto guida il giocatore: la cabrio nuova del Set 7 (`player_*`),
- * quella classica di prima (`player_classic_*`), la retrò
- * (`player_retro_*`), la sportiva (`player_sport_*`) o la supercar rossa
- * (`player_super_*`). Si sceglie nella radio con il tasto C.
- */
-export type CarChoice = 'new' | 'classic' | 'retro' | 'sport' | 'super';
-
-/**
- * Modalità di gioco (collaudo utente: due livelli di difficoltà). `normal`
- * è la taratura di sempre; `hard` ha più traffico, un po' più veloce, e i
- * suoi tempi per tappa. Si sceglie nella radio con il tasto D.
- */
-export type Difficulty = 'normal' | 'hard';
+// Auto e modalità stanno in `shared/kinds.ts`, che il Worker (`api/`) importa senza il resto.
+export type { CarChoice, Difficulty } from './shared/kinds';
+import type { CarChoice, Difficulty } from './shared/kinds';
 
 /** Strutture laterali continue (spec §4.4c). */
 export type WallKind =
@@ -187,6 +176,12 @@ export interface Actions {
    * TOP 10 lo leggono; le altre schermate lo ignorano. Opzionale, come `pause`.
    */
   click?: { x: number; y: number } | null;
+  /**
+   * Il pulsante DAILY CHALLENGE del titolo, toccato col dito (`ui/touch.ts`):
+   * vero solo nel tick del tocco. Tastiera e gamepad lo scelgono con su e giù,
+   * il mouse col clic sul pulsante. Opzionale, come `pause`.
+   */
+  daily?: boolean;
 }
 
 export type Gear = 'lo' | 'hi';
@@ -259,6 +254,14 @@ export interface StageDef {
    * `'normal'`: una `StageDef` scritta a mano non deve saperlo.
    */
   mode?: Difficulty;
+  /**
+   * Il traffico del giorno della sfida (DAILY): mescolato al seme del
+   * traffico, non a quello del tracciato. Stessi veicoli per tappa, stessa
+   * densità e stesse regole, solo posizioni, tipi e velocità diversi. Lo
+   * scrive `dailyGraph` di `game/daily.ts`; assente, il traffico è quello di
+   * sempre.
+   */
+  trafficSalt?: number;
 }
 
 export type Banner = 'none' | 'checkpoint' | 'gameover' | 'fork';

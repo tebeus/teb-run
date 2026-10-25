@@ -9,7 +9,8 @@ import { shareResultFrom } from '../share';
 import { drawText, drawTextOutlined } from '../text';
 import { GAMEPLAY } from '../../core/gameplayEvents';
 import { SDK_BUILD } from '../../core/target';
-import { bestLine, drawContinueButton, drawRetryMenu, initialRetryMenu, personalBest, RETRY_ROW_TOP, type RetryMenuState } from '../retryMenu';
+import { drawContinueButton, drawRetryMenu, initialRetryMenu, RETRY_ROW_TOP, type RetryMenuState } from '../retryMenu';
+import { enterEndOfGame, retryTarget } from '../endOfGame';
 import { gameOverLines, nameEntryPayload, stepEndOfGame } from './gameOver';
 
 export const ENDING_DURATION_S = 8;
@@ -55,9 +56,10 @@ export function stepEnding(
   actions: Actions,
   hold = false,
   tap: { x: number; y: number } | null = null,
+  retryTo: (song: number) => Transition = (song) => go('race', { song }),
 ): { state: EndingState; transition: Transition | null } {
   const p = state.payload;
-  return stepEndOfGame(state, dt, actions, hold, tap, ENDING_DURATION_S, () => go('nameEntry', nameEntryPayload(p)), p.song ?? 0);
+  return stepEndOfGame(state, dt, actions, hold, tap, ENDING_DURATION_S, () => go('nameEntry', nameEntryPayload(p)), () => retryTo(p.song ?? 0));
 }
 
 /**
@@ -116,17 +118,23 @@ export function createEndingScreen(deps: ScreenDeps): Screen {
   /** Sopra RETRY: la tappa raggiunta e il record personale (di prima di questa partita). */
   let stageText = '';
   let bestText = '';
+  /** In DAILY, sopra la tappa: `NEW CHALLENGE IN 5H 12M`. */
+  let nextLine: string | null = null;
+  const retryTo = retryTarget(deps);
 
   return {
     enter(payload) {
       const parsed = parseEndingPayload(payload, deps.firstStage);
-      state = { t: 0, payload: parsed, qualifies: deps.scores.qualifies(parsed.score), menu: initialRetryMenu() };
+      // La festa del portale: un finale, record o no (una volta sola), quindi
+      // `enterEndOfGame` non ne fa un'altra.
+      const end = enterEndOfGame(deps, parsed, true);
+      state = { t: 0, payload: parsed, qualifies: end.qualifies, menu: initialRetryMenu() };
       // Un tocco arrivato in gara non sceglie niente qui.
       deps.signals?.takeTap();
       visited = visitedStages(parsed.route);
       stageText = gameOverLines(parsed).stage;
-      bestText = bestLine(parsed.score, personalBest(deps.scores.load()));
-      // La festa del portale: un finale, record o no (una volta sola).
+      bestText = end.bestText;
+      nextLine = end.nextLine;
       if (SDK_BUILD) GAMEPLAY.celebrate();
       // Spec §10: "finale = fanfara 8 note". Nessun altro la suona.
       deps.audio.sfx('fanfare');
@@ -136,7 +144,7 @@ export function createEndingScreen(deps: ScreenDeps): Screen {
       deps.share?.offer(null);
     },
     update(dt, actions) {
-      const r = stepEnding(state, dt, actions, deps.share?.held() ?? false, deps.signals?.takeTap() ?? null);
+      const r = stepEnding(state, dt, actions, deps.share?.held() ?? false, deps.signals?.takeTap() ?? null, retryTo);
       state = r.state;
       return r.transition;
     },
@@ -220,6 +228,7 @@ export function createEndingScreen(deps: ScreenDeps): Screen {
         ctx.drawImage(border.image, 0, 0, LOGICAL_W, LOGICAL_H);
       }
       // Sopra la cornice: la tappa e il record, poi RETRY e MENU, o CONTINUE prima delle iniziali.
+      if (nextLine !== null) drawTextOutlined(ctx, nextLine, LOGICAL_W / 2, RETRY_ROW_TOP - 84, 2, '#cccccc', 'center');
       drawTextOutlined(ctx, stageText, LOGICAL_W / 2, RETRY_ROW_TOP - 60, 2, '#ffffff', 'center');
       drawTextOutlined(ctx, bestText, LOGICAL_W / 2, RETRY_ROW_TOP - 36, 3, '#ffee55', 'center');
       if (state.qualifies) drawContinueButton(ctx);

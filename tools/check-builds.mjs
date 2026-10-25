@@ -22,7 +22,11 @@
 //   un'origine esterna diversa da quella dell'SDK di CrazyGames (che deve
 //   esserci);
 // - nella site e nella portal: qualunque traccia dell'SDK di CrazyGames o
-//   delle sue pubblicità.
+//   delle sue pubblicità;
+// - la classifica mondiale fuori posto: nella site api.tebrun.io deve stare
+//   nel codice, in connect-src del <meta> e di `_headers` e in nient'altro;
+//   nella portal e nella crazygames non deve comparire in nessun file; e
+//   l'API di sviluppo (`wrangler dev`, localhost:8787) in nessuna build.
 // Lo richiamano gli e2e (e2e/subfolder.spec.ts) e tests/wiring/builds.test.ts.
 //
 //   node tools/check-builds.mjs              costruisce in una cartella temporanea e la cancella
@@ -113,6 +117,26 @@ export function nameProblems(files) {
 
 /** L'host delle statistiche (GoatCounter): solo nella build site. */
 export const STATS_HOST = 'tebrun.goatcounter.com';
+/** La classifica mondiale (src/core/config.ts, `API_ORIGIN`): solo nella build site. */
+export const API_HOST = `api.${SITE_DOMAIN}`;
+/** L'API di `wrangler dev` (src/core/config.ts, `DEV_API_ORIGIN`): mai in una build pubblica. */
+export const DEV_API_HOST = 'localhost:8787';
+
+/**
+ * La classifica mondiale in una CSP (`csp`: il testo della politica): nella
+ * site in connect-src e in nient'altro; altrove da nessuna parte. Pura.
+ */
+export function apiCspProblems(csp, target, where = 'CSP') {
+  const origin = `https://${API_HOST}`;
+  const out = [];
+  const directives = csp.split(';').map((d) => d.trim().split(/\s+/));
+  for (const d of directives) {
+    if (d.slice(1).includes(origin) && !(target === 'site' && d[0] === 'connect-src')) out.push(`${where} ${d[0]} names ${API_HOST}`);
+  }
+  if (target === 'site' && !directives.find((x) => x[0] === 'connect-src')?.includes(origin)) out.push(`${where} connect-src lacks ${origin}`);
+  if (target !== 'site' && csp.includes(API_HOST)) out.push(`${where} names ${API_HOST} outside the site build`);
+  return [...new Set(out)];
+}
 
 /**
  * Problemi della CSP del <meta> di index.html per `target`: nella site
@@ -146,6 +170,17 @@ export function checkBuild(dir, forbidden = forbiddenStrings(), target = null) {
   const out = nameProblems(files);
   if (!files.includes('index.html')) out.push('no index.html');
   if (target === 'site' && !files.includes('_headers')) out.push('no _headers (Cloudflare Pages)');
+  if (target === 'site' && files.includes('_headers')) {
+    const header = /^\s+Content-Security-Policy:\s*(.+)$/m.exec(readFileSync(join(dir, '_headers'), 'utf8'))?.[1] ?? '';
+    out.push(...apiCspProblems(header, 'site', '_headers'));
+  }
+  if (target !== null && files.includes('index.html')) {
+    const csp = /<meta\s+http-equiv="Content-Security-Policy"\s+content="([^"]+)"/.exec(readFileSync(join(dir, 'index.html'), 'utf8'))?.[1];
+    if (csp !== undefined) out.push(...apiCspProblems(csp, target));
+  }
+  if (target === 'site' && !files.some((f) => /\.js$/.test(f) && readFileSync(join(dir, f), 'latin1').includes(`https://${API_HOST}`))) {
+    out.push(`no ${API_HOST} in the site build (the world leaderboard)`);
+  }
   if (target !== null && target !== 'site' && files.includes('_headers')) out.push(`_headers in the ${target} build`);
   if (files.length > MAX_FILES) out.push(`${files.length} files, over ${MAX_FILES}`);
   if (target !== null && files.includes('index.html')) out.push(...cspProblems(readFileSync(join(dir, 'index.html'), 'utf8'), target));
@@ -153,6 +188,8 @@ export function checkBuild(dir, forbidden = forbiddenStrings(), target = null) {
     const bytes = readFileSync(join(dir, file));
     const text = bytes.toString('latin1');
     if (target !== null && target !== 'site' && text.includes(STATS_HOST)) out.push(`${file} names ${STATS_HOST} in the ${target} build`);
+    if (target !== null && target !== 'site' && text.includes(API_HOST)) out.push(`${file} names ${API_HOST} in the ${target} build`);
+    if (target !== null && text.includes(DEV_API_HOST)) out.push(`${file} names the dev API ${DEV_API_HOST}`);
     if (target === 'crazygames' && /\.(js|css|html|json)$/.test(file)) {
       out.push(...crazyGamesProblems(text).map((p) => `${file}: ${p}`));
       out.push(...outsideOrigins(text).map((o) => `${file}: outside origin ${o}`));

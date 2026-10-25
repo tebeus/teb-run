@@ -405,7 +405,9 @@ export function renderHud(
   // Modalità della partita, in piccolo sotto il giro (collaudo utente: due
   // livelli di difficoltà).
   const mode = modeOf(stage);
-  drawTextOutlined(ctx, modeLabel(mode), 900, HUD_MODE_Y, 2, HUD_MODE_COLORS[mode], 'left', HUD_COLORS.outline);
+  // La sfida del giorno (traffico del giorno nella tappa): si dice anche in gara.
+  const label = stage.trafficSalt === undefined ? modeLabel(mode) : `${modeLabel(mode)} · DAILY`;
+  drawTextOutlined(ctx, label, 900, HUD_MODE_Y, 2, HUD_MODE_COLORS[mode], 'left', HUD_COLORS.outline);
 
   // In basso a sinistra: velocità e km/h.
   const speedY = LOGICAL_H - 64;

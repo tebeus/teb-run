@@ -43,6 +43,7 @@ describe('createFsm glue: transition tick semantics', () => {
     const input = createInput(t);
     const screens = {
       title: makePlaceholder('T', 'radio'),
+      daily: makePlaceholder('D', 'radio'),
       radio: makePlaceholder('R', 'race'),
       race: makePlaceholder('X', 'ending'),
       ending: makePlaceholder('E', 'nameEntry'),

@@ -14,12 +14,9 @@ import type { ScreenDeps } from '../deps';
 import { go, type Screen, type ScreenPayloads, type Transition } from '../fsm';
 import { shareResultFrom } from '../share';
 import { drawTextOutlined, measureText } from '../text';
-import { GAMEPLAY } from '../../core/gameplayEvents';
-import { SDK_BUILD } from '../../core/target';
+import { enterEndOfGame, retryTarget } from '../endOfGame';
 import {
   bestLine,
-  isNewBest,
-  personalBest,
   continueChosen,
   drawContinueButton,
   drawRetryMenu,
@@ -58,8 +55,10 @@ export function parseGameOverPayload(payload: unknown, fallbackStage: StageDef):
  * classifica: CONTINUE (ENTER, o tocco o clic sul pulsante) o il tempo
  * scaduto portano alle iniziali; con `hold` (dopo SHARE) il tempo non scade.
  * Altrimenti RETRY e MENU, senza tempo: RETRY riparte subito con lo stesso
- * brano (auto e modalità sono quelle salvate), MENU torna al titolo. `tap`
- * è il tocco o il clic del tick. Pura.
+ * brano (auto e modalità sono quelle salvate, o quelle della sfida del
+ * giorno), MENU torna al titolo. `retryTo` dice dove porta RETRY (la gara, o
+ * la schermata della sfida nuova se nel frattempo è passata la mezzanotte).
+ * `tap` è il tocco o il clic del tick. Pura.
  */
 export function stepEndOfGame<S extends { t: number; qualifies: boolean; menu?: RetryMenuState }>(
   state: S,
@@ -69,7 +68,7 @@ export function stepEndOfGame<S extends { t: number; qualifies: boolean; menu?: 
   tap: { x: number; y: number } | null,
   duration: number,
   toNameEntry: () => Transition,
-  song: number,
+  retryTo: () => Transition,
 ): { state: S; transition: Transition | null } {
   const t = state.t + dt;
   if (state.qualifies) {
@@ -80,7 +79,7 @@ export function stepEndOfGame<S extends { t: number; qualifies: boolean; menu?: 
   }
   const r = stepRetryMenu(state.menu ?? { ...initialRetryMenu(), t: state.t }, dt, actions, tap);
   const next = { ...state, t, menu: r.state };
-  if (r.chosen === 'retry') return { state: next, transition: go('race', { song }) };
+  if (r.chosen === 'retry') return { state: next, transition: retryTo() };
   if (r.chosen === 'menu') return { state: next, transition: go('title', undefined) };
   return { state: next, transition: null };
 }
@@ -92,14 +91,33 @@ export function stepGameOver(
   actions: Actions,
   hold = false,
   tap: { x: number; y: number } | null = null,
+  retryTo: (song: number) => Transition = (song) => go('race', { song }),
 ): { state: GameOverState; transition: Transition | null } {
   const p = state.payload;
-  return stepEndOfGame(state, dt, actions, hold, tap, GAME_OVER_DURATION_S, () => go('nameEntry', nameEntryPayload(p)), p.song ?? 0);
+  return stepEndOfGame(state, dt, actions, hold, tap, GAME_OVER_DURATION_S, () => go('nameEntry', nameEntryPayload(p)), () => retryTo(p.song ?? 0));
 }
 
-/** Il payload delle iniziali da un risultato di fine partita: il brano viaggia con lui. Pura. */
-export function nameEntryPayload(p: { score: number; stage: StageDef; route: ('L' | 'R')[]; song?: number }): ScreenPayloads['nameEntry'] {
-  return { score: p.score, stageId: p.stage.id, route: p.route, ...(p.song === undefined ? {} : { song: p.song }) };
+/**
+ * Il payload delle iniziali da un risultato di fine partita: il brano, il
+ * tempo di gara e il finale viaggiano con lui (la classifica mondiale li
+ * chiede). Pura.
+ */
+export function nameEntryPayload(p: {
+  score: number;
+  stage: StageDef;
+  route: ('L' | 'R')[];
+  song?: number;
+  time?: number;
+  ending?: number;
+}): ScreenPayloads['nameEntry'] {
+  return {
+    score: p.score,
+    stageId: p.stage.id,
+    route: p.route,
+    ...(p.song === undefined ? {} : { song: p.song }),
+    ...(p.time === undefined ? {} : { time: p.time }),
+    ...(p.ending === undefined ? {} : { ending: p.ending }),
+  };
 }
 
 /** Fondo dove l'illustrazione non arriva (letterbox): il blu del mare della mappa. */
@@ -135,11 +153,13 @@ function centredTextRect(text: string, y: number, scale: number): MapRect {
  * (`best`, prima di questa partita; assente, niente record), la tappa
  * raggiunta. Pura.
  */
-export function gameOverLines(payload: GameOverPayload, best?: number): { title: string; score: string; stage: string } {
+export function gameOverLines(payload: GameOverPayload, best?: number | string): { title: string; score: string; stage: string } {
   const level = Number(/^(\d)-/.exec(payload.stage.id)?.[1] ?? 0);
+  // `best` è il record di prima (un numero) o la scritta già fatta (DAILY).
+  const bestText = typeof best === 'string' ? best : best === undefined ? null : bestLine(payload.score, best);
   return {
     title: 'GAME OVER',
-    score: best === undefined ? `SCORE ${payload.score}` : `SCORE ${payload.score}   ${bestLine(payload.score, best)}`,
+    score: bestText === null ? `SCORE ${payload.score}` : `SCORE ${payload.score}   ${bestText}`,
     stage: `STAGE ${level + 1}  ${payload.stage.name}`.toUpperCase(),
   };
 }
@@ -150,16 +170,21 @@ export function gameOverLines(payload: GameOverPayload, best?: number): { title:
  * tappe, largo 1000 px (78% della larghezza), senza che nessuna riga di
  * testo entri nel suo riquadro. Pura.
  */
-export function gameOverLayout(payload: GameOverPayload, best?: number): GameOverLayout {
+export function gameOverLayout(payload: GameOverPayload, best?: number | string, nextLine?: string | null): GameOverLayout {
   const lines = gameOverLines(payload, best);
   const title = centredTextRect(lines.title, 22, TITLE_SCALE);
   const score = centredTextRect(lines.score, 104, SCORE_SCALE);
   const stage = centredTextRect(lines.stage, 148, STAGE_SCALE);
-  const top = stage.y + stage.h + 20;
+  // In DAILY una riga in più sotto la tappa (`NEW CHALLENGE IN ...`): la mappa scende.
+  const top = stage.y + stage.h + 20 + (nextLine ? NEXT_LINE_H : 0);
   // In basso la fila di RETRY e MENU (o CONTINUE): la mappa si ferma sopra.
   const map = { x: 140, y: top, w: 1000, h: RETRY_ROW_TOP - 12 - top };
   return { title, score, stage, map };
 }
+
+/** Altezza della riga `NEW CHALLENGE IN ...` sotto la tappa, in DAILY. */
+export const NEXT_LINE_H = 26;
+export const NEXT_LINE_Y = 182;
 
 /** Nome di una tappa per id, maiuscolo; stringa vuota se l'id non è del grafo. Pura. */
 function stageName(id: string, fallback: StageDef): string {
@@ -196,20 +221,22 @@ export function createGameOverScreen(deps: ScreenDeps): Screen {
   let layout = gameOverLayout(state.payload);
   let lines = gameOverLines(state.payload);
   let labels = stageLabels(visited, layout.map, state.payload.stage);
+  let nextLine: string | null = null;
+  const retryTo = retryTarget(deps);
 
   return {
     enter(payload) {
       const parsed = parseGameOverPayload(payload, deps.firstStage);
-      state = { t: 0, payload: parsed, qualifies: deps.scores.qualifies(parsed.score), menu: initialRetryMenu() };
+      // Il record di prima (la partita entra in classifica solo dopo le
+      // iniziali), le iniziali sì o no, la festa del portale: `endOfGame.ts`.
+      const end = enterEndOfGame(deps, parsed, false);
+      state = { t: 0, payload: parsed, qualifies: end.qualifies, menu: initialRetryMenu() };
       // Un tocco arrivato in gara non sceglie niente qui.
       deps.signals?.takeTap();
       visited = visitedStages(parsed.route);
-      // Il record di prima: la partita entra in classifica solo dopo le iniziali.
-      const best = personalBest(deps.scores.load());
-      // La festa del portale su un nuovo record (non sul primo punteggio di tutti).
-      if (SDK_BUILD && best > 0 && isNewBest(parsed.score, best)) GAMEPLAY.celebrate();
-      layout = gameOverLayout(parsed, best);
-      lines = gameOverLines(parsed, best);
+      nextLine = end.nextLine;
+      layout = gameOverLayout(parsed, end.bestText, nextLine);
+      lines = gameOverLines(parsed, end.bestText);
       labels = stageLabels(visited, layout.map, parsed.stage);
       deps.share?.offer(shareResultFrom('gameOver', parsed, deps.car?.get()));
     },
@@ -217,7 +244,7 @@ export function createGameOverScreen(deps: ScreenDeps): Screen {
       deps.share?.offer(null);
     },
     update(dt, actions) {
-      const r = stepGameOver(state, dt, actions, deps.share?.held() ?? false, deps.signals?.takeTap() ?? null);
+      const r = stepGameOver(state, dt, actions, deps.share?.held() ?? false, deps.signals?.takeTap() ?? null, retryTo);
       state = r.state;
       return r.transition;
     },
@@ -235,6 +262,7 @@ export function createGameOverScreen(deps: ScreenDeps): Screen {
       drawTextOutlined(ctx, lines.title, LOGICAL_W / 2, layout.title.y + 1, TITLE_SCALE, '#ff3333', 'center');
       drawTextOutlined(ctx, lines.score, LOGICAL_W / 2, layout.score.y + 1, SCORE_SCALE, '#ffee55', 'center');
       drawTextOutlined(ctx, lines.stage, LOGICAL_W / 2, layout.stage.y + 1, STAGE_SCALE, '#ffffff', 'center');
+      if (nextLine !== null) drawTextOutlined(ctx, nextLine, LOGICAL_W / 2, NEXT_LINE_Y, 2, '#cccccc', 'center');
       if (state.qualifies) drawContinueButton(ctx);
       else drawRetryMenu(ctx, state.menu ?? initialRetryMenu(), deps.device?.() ?? 'keyboard');
       ctx.restore();

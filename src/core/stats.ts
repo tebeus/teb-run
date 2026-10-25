@@ -28,6 +28,10 @@ export const STAT_EVENTS = {
   mode: (mode: Difficulty): string => `mode/${mode}`,
   /** Auto della partita. */
   car: (car: CarChoice): string => `car/${car}`,
+  /** Una partita della sfida giornaliera parte (oltre a `game/start`). */
+  dailyStart: (): string => 'daily/start',
+  /** Una partita della sfida giornaliera finisce (game over o arrivo). Nessun punteggio. */
+  dailyEnd: (): string => 'daily/end',
 } as const;
 
 /** Forma di ogni nome ammesso: minuscole, cifre, `-` e al più una `/`; L e R solo per i bivi. */
@@ -209,7 +213,7 @@ export function browserStatsEnv(win: Window): StatsEnv {
  * passano intatti; nessun lavoro in più per fotogramma oltre a scorrere gli
  * eventi che il motore ritorna già.
  */
-export function trackRace(race: RaceEngine, stats: Stats, startStageId: string): RaceEngine {
+export function trackRace(race: RaceEngine, stats: Stats, startStageId: string, daily = false): RaceEngine {
   if (!stats.active) return race;
   let current = startStageId;
   return {
@@ -224,6 +228,7 @@ export function trackRace(race: RaceEngine, stats: Stats, startStageId: string):
         } else if (e.type === 'finish') {
           stats.event(STAT_EVENTS.ending(e.ending + 1));
         }
+        if (daily && (e.type === 'finish' || e.type === 'gameover')) stats.event(STAT_EVENTS.dailyEnd());
       }
       return events;
     },

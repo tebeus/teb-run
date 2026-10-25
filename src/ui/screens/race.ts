@@ -223,6 +223,10 @@ export function createRaceScreen(deps: ScreenDeps): Screen {
       goalT = GOAL_LINE_BUILD && !hintShown ? 0 : null;
       hintT = hintShown ? null : 0;
       hintShown = true;
+      // La top 10 mondiale di questa partita (oggi, o la sfida del giorno),
+      // chiesta adesso: a fine partita dice se chiedere le iniziali. Se non
+      // arriva, vale la regola locale.
+      deps.board?.top(deps.mode?.get() ?? 'normal', deps.daily?.current() ? 'daily' : 'today');
       // Un tocco o una perdita di fuoco arrivati prima della gara (titolo,
       // radio) non devono aprire la pausa al primo tick.
       deps.signals?.takeTap();

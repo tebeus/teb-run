@@ -1,11 +1,12 @@
 # Intestazioni HTTP per Cloudflare Pages, solo nella build site
 # (https://play.tebrun.io). La politica è quella del <meta> della build site
 # (index.html passata per `cspForTarget` di vite.config.ts: l'origine delle
-# statistiche GoatCounter in connect-src e img-src, nient'altro) più
+# statistiche GoatCounter in connect-src e img-src, e la classifica mondiale
+# https://api.tebrun.io in connect-src, nient'altro) più
 # frame-ancestors, che in un <meta> non vale: il gioco può stare in un iframe
 # su https://tebrun.io e su sé stesso, da nessun'altra parte. Niente
 # X-Frame-Options: DENY bloccherebbe anche tebrun.io.
 /*
-  Content-Security-Policy: default-src 'self'; img-src 'self' https://tebrun.goatcounter.com; script-src 'self'; media-src 'self'; object-src 'none'; base-uri 'self'; connect-src 'self' https://tebrun.goatcounter.com; frame-ancestors 'self' https://tebrun.io
+  Content-Security-Policy: default-src 'self'; img-src 'self' https://tebrun.goatcounter.com; script-src 'self'; media-src 'self'; object-src 'none'; base-uri 'self'; connect-src 'self' https://tebrun.goatcounter.com https://api.tebrun.io; frame-ancestors 'self' https://tebrun.io
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin

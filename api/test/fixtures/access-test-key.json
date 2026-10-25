@@ -1,0 +1,24 @@
+{
+  "note": "Chiave RSA solo per i test: firma token di Access finti. Non vale fuori dai test.",
+  "public": {
+    "kty": "RSA",
+    "n": "qmZIDoPCSkBSeiDLmv6BlqSvVcC-sd3KCAodG9lo6L0gq2sgyK_19Rh9ckaeSPcwaw4sMyR5PjiyaTwUd21Y3pBdSgO1CmqGZuuhawN9yuuybgEkHq7LZrJJ2OXcmQ2zeekqEU-hIF3Ejxja5hv3f2kRAm-2J7is4ELGi-HiExoCmtw_yByYFFbRduR6T9YPfaw3PWMBcVCNldj7gHFKQCBkT5ehLo4zVFpl0oP8rutItAuv4NNoKyasTDVH-Hhje7Sz_jv8bggEFzmFc7FCPEtvFV0DZF7jBH_xwaFcBajxRwK_FnynSnRDsynoIdOenyT_mShHQLPCVNtdvb_fZw",
+    "e": "AQAB",
+    "kid": "test-key",
+    "alg": "RS256",
+    "use": "sig"
+  },
+  "private": {
+    "kty": "RSA",
+    "n": "qmZIDoPCSkBSeiDLmv6BlqSvVcC-sd3KCAodG9lo6L0gq2sgyK_19Rh9ckaeSPcwaw4sMyR5PjiyaTwUd21Y3pBdSgO1CmqGZuuhawN9yuuybgEkHq7LZrJJ2OXcmQ2zeekqEU-hIF3Ejxja5hv3f2kRAm-2J7is4ELGi-HiExoCmtw_yByYFFbRduR6T9YPfaw3PWMBcVCNldj7gHFKQCBkT5ehLo4zVFpl0oP8rutItAuv4NNoKyasTDVH-Hhje7Sz_jv8bggEFzmFc7FCPEtvFV0DZF7jBH_xwaFcBajxRwK_FnynSnRDsynoIdOenyT_mShHQLPCVNtdvb_fZw",
+    "e": "AQAB",
+    "d": "REq5yX3Rxr0z6os6QeQk2G5bcJxona1F5L_ChGbRC0LBO4vm_iEhC7Nek24gaFEPsD6XeE4l4v08g71dQ0zC6taKjOwioqOobTDPTXqyVge6FMLGtx7wZgUOYHjyif5aIxuCwKCPv89uXetlAtQykEQlJqGe-Rk9yXAs73yYHqimE-Wto-pKqI3W4Jtf-jL8IbnMTmOCWH_R49Pjn1vWPZ8y8H8TGrBBgS6oQPwJHbV7lx9kxiVUriyzaIneywoWFkaO7BEDh0dPPqHk6hD9DNEgz60yol7Fkzy2N_eUn1ZgSTajSmXUIdVbXmA6gvVlpSp3soyhvWbPqqMdCjSZ",
+    "p": "4YZmADijoTW3it8Lum_HhWL_Y_RuXWBH0utKMzbsW7KRb6dKFX0wRLwkNQGQMX2v2WjMtm-5zBh0vXWrk2Cg66VsRb7xpq8Iasf-FDdmPQokslbSZ3oTtjNgzaTlSHkXOrNWgl_5zEy9TaYNsuWTxfbEXOGdIcU_afBRqhzZNR0",
+    "q": "wWzsoIcBXjvTbfAPA0hq9BHqYW1q3x19FoOD2x_7DX5w6kZBiLJ0_JWfFMfdnQfzk_lkcPd9JzxZpwVZGpCU5k4k4wZW-HDriweEc90T3vq-_ouhCuve3xr0gcoy2LC0JkzWWGYURfUTjr9uDhfaRe9U4HAkBlHzuAkYeQzkk1M",
+    "dp": "cDv5cSy-yhC4mgTsikjsq4YcATt43UF4HRB5aclwkSXp2P4REWau6dYT0slHYEnjhLfyAOzTMy4MkukHjR2ul_dITeF7028SKkoDOT5kxAXTQ2mP5m1LeAZTq6Pfc1TH6a-sYs-uuiyKnSUBdkFobEGlcW_aSh8msuslSRp4QkU",
+    "dq": "nIGqJWmXrcvyk63-N8XM5JfqcdK6-rU9lY3sjs0dshlw-97E__qFtirKgWIG6xyX9k-A-fcHCUxHrmEha-E42fC44AktLfEQZXo7rhRgE7gH-qa4M8IOn6-Lz8jvw22XFrZtaTGPjdtza7lxL24VayjwIHocbBC7h1m0t527BYk",
+    "qi": "IhpfbFAJynCe6aCBLeZut4Q3gA3mTLqQwTcFV7gSrK1li4mF-0BATFrl3mHZFy-t1GEBhka7ImE4E5gkpsG6UwESB5S0PkTjltsrN9srrwu9xj8Q37J4Ng1Es9zzA6OZEzOJ6u2euvxosqPCYELl8spQNOa4E1_cD2tDu7sSlgk",
+    "kid": "test-key",
+    "alg": "RS256"
+  }
+}

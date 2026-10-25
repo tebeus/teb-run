@@ -28,3 +28,7 @@ art/reference/
 public/music/custom/*
 !public/music/custom/README.md
 !public/music/custom/manifest.json
+
+# Il Worker (api/): stato locale di wrangler (D1 locale, cache) e segreti di sviluppo.
+api/.wrangler/
+api/.dev.vars

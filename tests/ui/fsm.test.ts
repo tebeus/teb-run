@@ -20,7 +20,7 @@ function fakeScreen(next: Transition | null, log: string[], name: string): Scree
 }
 
 function allScreens(log: string[], overrides: Partial<Record<ScreenName, Screen>>): Record<ScreenName, Screen> {
-  const names: ScreenName[] = ['title', 'radio', 'race', 'ending', 'gameOver', 'nameEntry', 'scores'];
+  const names: ScreenName[] = ['title', 'daily', 'radio', 'race', 'ending', 'gameOver', 'nameEntry', 'scores'];
   const base = {} as Record<ScreenName, Screen>;
   for (const n of names) base[n] = fakeScreen(null, log, n);
   return { ...base, ...overrides };

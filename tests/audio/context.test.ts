@@ -304,3 +304,90 @@ describe('createAudioHost with a context', () => {
     expect(host.running).toBe(true);
   });
 });
+
+describe('iPhone silent switch: navigator.audioSession (iOS 17+)', () => {
+  function fakeCtor(log: string[]) {
+    return class {
+      state = 'suspended';
+      currentTime = 0;
+      destination = {};
+      onstatechange: (() => void) | null = null;
+      createGain() {
+        return { gain: { value: 0, cancelScheduledValues() {}, setValueAtTime() {}, linearRampToValueAtTime() {} }, connect() {} };
+      }
+      resume() {
+        log.push('resume');
+        this.state = 'running';
+        return Promise.resolve();
+      }
+    } as unknown as AudioContextCtor;
+  }
+
+  test('set to playback inside the first gesture, before the context resumes', () => {
+    const log: string[] = [];
+    const session = {
+      _t: 'ambient',
+      get type() {
+        return this._t;
+      },
+      set type(v: string) {
+        log.push(`session:${v}`);
+        this._t = v;
+      },
+    };
+    const host = createAudioHost({ AudioContext: fakeCtor(log), navigator: { audioSession: session } });
+    host.unlock();
+    expect(log).toEqual(['session:playback', 'resume']);
+    host.unlock();
+    // Già `playback`: non si riscrive.
+    expect(log.filter((l) => l.startsWith('session'))).toHaveLength(1);
+  });
+
+  test('absent: no error, audio as before', () => {
+    const log: string[] = [];
+    const host = createAudioHost({ AudioContext: fakeCtor(log), navigator: {} });
+    expect(() => host.unlock()).not.toThrow();
+    expect(log).toEqual(['resume']);
+    expect(host.available).toBe(true);
+  });
+
+  test('a setter that throws: no error, the audio still starts', () => {
+    const log: string[] = [];
+    const session = {
+      get type() {
+        return 'ambient';
+      },
+      set type(_v: string) {
+        throw new Error('NotAllowedError');
+      },
+    };
+    const host = createAudioHost({ AudioContext: fakeCtor(log), navigator: { audioSession: session } });
+    expect(() => host.unlock()).not.toThrow();
+    expect(log).toEqual(['resume']);
+  });
+
+  test('M and the host mutes still win: the session only lets iOS play', () => {
+    const ramps: number[] = [];
+    const Ctor = class {
+      state = 'running';
+      currentTime = 0;
+      destination = {};
+      onstatechange: (() => void) | null = null;
+      createGain() {
+        return { gain: { value: 0, cancelScheduledValues() {}, setValueAtTime() {}, linearRampToValueAtTime: (v: number) => void ramps.push(v) }, connect() {} };
+      }
+      resume() {
+        return Promise.resolve();
+      }
+    } as unknown as AudioContextCtor;
+    const session = { type: 'ambient' };
+    const host = createAudioHost({ AudioContext: Ctor, navigator: { audioSession: session } });
+    host.unlock();
+    expect(session.type).toBe('playback');
+    host.setHostMute('ad', true);
+    host.setHostMute('ad', false);
+    host.toggleMute();
+    expect(host.muted).toBe(true);
+    expect(ramps).toEqual([0, MASTER_LEVEL, 0]);
+  });
+});

@@ -11,6 +11,14 @@ export const PLAY_URL = `https://play.${SITE_DOMAIN}`;
 
 export const PRIVACY_URL = `${SITE_URL}/privacy/`;
 export const ABOUT_URL = `${SITE_URL}/about/`;
+/**
+ * L'API della classifica mondiale e della sfida (Worker `api/`). Solo la
+ * build site. Scritta per intero, non da `SITE_DOMAIN`: così il bundler la
+ * lascia in chiaro e `check:builds` la trova (un test la lega al dominio).
+ */
+export const API_ORIGIN = 'https://api.tebrun.io';
+/** L'API di `wrangler dev` (cartella `api/`), per la build privata e `npm run dev`. */
+export const DEV_API_ORIGIN = 'http://localhost:8787';
 
 /**
  * Statistiche senza cookie (lancio, punto 11): GoatCounter, sito `tebrun`.

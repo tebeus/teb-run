@@ -12,7 +12,7 @@ import type { ScreenName } from './fsm';
 import { mouseButtonActions } from './touch';
 
 /** Le schermate dove un clic del mouse fa qualcosa ovunque cada (per il puntatore). */
-const CLICK_ANYWHERE: readonly ScreenName[] = ['title', 'radio', 'scores'];
+const CLICK_ANYWHERE: readonly ScreenName[] = ['title', 'daily', 'radio', 'scores'];
 
 /** Il puntatore a manina su `screen` nel punto `p`? Pura. */
 export function clickable(screen: ScreenName, p: LogicalPoint, extra: (screen: ScreenName, p: LogicalPoint) => boolean = () => false): boolean {

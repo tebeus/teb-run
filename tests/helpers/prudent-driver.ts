@@ -146,6 +146,15 @@ export interface RouteRun {
   bumps: number;
   /** Tick chiusi fuori dall'asfalto (banchina o erba). */
   offRoadTicks: number;
+  /** Punteggio finale (dall'evento `finish` o `gameover`), 0 se la corsa non è finita. */
+  score: number;
+  /** Secondi di gara del motore (`snapshot.elapsed`) a fine corsa. */
+  elapsed: number;
+  /** Ultima tappa raggiunta e scelte fatte ai bivi. */
+  stageId: string;
+  route: ('L' | 'R')[];
+  /** Finale 0..4, solo se la corsa è finita all'arrivo. */
+  ending?: number;
 }
 
 export interface DriveOptions {
@@ -193,6 +202,9 @@ export function driveRouteWith(
   let crashes = 0;
   let bumps = 0;
   let offRoadTicks = 0;
+  let score = 0;
+  let ending: number | undefined;
+  const taken: ('L' | 'R')[] = [];
 
   while (ticks < maxTicks) {
     ticks++;
@@ -205,13 +217,17 @@ export function driveRouteWith(
     for (const ev of events) {
       if (ev.type === 'checkpoint') {
         margins.push({ id: before.id, level: levelOf(before.id), margin: before.timeLeft });
+        taken.push(side);
         forks++;
       } else if (ev.type === 'finish') {
         margins.push({ id: before.id, level: levelOf(before.id), margin: before.timeLeft });
         finished = true;
+        score = ev.score;
+        ending = ev.ending;
       } else if (ev.type === 'gameover') {
         margins.push({ id: before.id, level: levelOf(before.id), margin: 0 });
         gameOver = true;
+        score = ev.score;
       } else if (ev.type === 'crash') {
         crashes++;
       } else if (ev.type === 'bump') {
@@ -220,7 +236,21 @@ export function driveRouteWith(
     }
     if (finished || gameOver) break;
   }
-  return { margins, finished, gameOver, ticks, crashes, bumps, offRoadTicks };
+  const last = engine.snapshot();
+  return {
+    margins,
+    finished,
+    gameOver,
+    ticks,
+    crashes,
+    bumps,
+    offRoadTicks,
+    score,
+    elapsed: last.elapsed ?? 0,
+    stageId: last.stage.id,
+    route: taken,
+    ending,
+  };
 }
 
 /** I 16 percorsi completi del grafo, come liste di scelte. */

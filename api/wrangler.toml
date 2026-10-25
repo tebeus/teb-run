@@ -1,0 +1,35 @@
+# Il Worker della classifica mondiale e della sfida giornaliera di TEB RUN
+# (spec docs/superpowers/specs/2026-10-25-classifica-e-sfida.md). Deploy e
+# database li fa il Claude del lancio con Teb: vedi api/README.md.
+name = "tebrun-api"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+# Niente *.workers.dev: si arriva solo da api.tebrun.io, dove c'è Access per /admin.
+workers_dev = false
+routes = [{ pattern = "api.tebrun.io", custom_domain = true }]
+
+[vars]
+# Le origini che possono chiamare POST /score e GET /top dal browser.
+ALLOWED_ORIGINS = "https://play.tebrun.io"
+# Il team di Cloudflare Access che protegge /admin. ACCESS_AUD è un segreto:
+# `npx wrangler secret put ACCESS_AUD`.
+ACCESS_TEAM = "holy-sun-a1da"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "tebrun-scores"
+# Da riempire con l'id che stampa `npx wrangler d1 create tebrun-scores`.
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "migrations"
+
+# Limite di richieste per IP, tenuto solo in memoria da Cloudflare per al più
+# 60 s: l'IP non finisce mai in D1, nei log o nelle risposte.
+[[ratelimits]]
+name = "POST_LIMIT"
+namespace_id = "1001"
+simple = { limit = 6, period = 60 }
+
+[[ratelimits]]
+name = "GET_LIMIT"
+namespace_id = "1002"
+simple = { limit = 60, period = 60 }

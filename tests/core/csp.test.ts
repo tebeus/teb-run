@@ -122,15 +122,20 @@ describe('CSP per build target (statistics only in the site build)', () => {
     expect(STATS_ORIGIN).toBe('https://tebrun.goatcounter.com');
   });
 
-  test('index.html itself never names the stats origin: dev and private use it as is', () => {
+  test('index.html itself never names the stats origin; portal uses it as is, private adds only wrangler dev', () => {
     expect(INDEX).not.toContain('goatcounter');
-    expect(cspForTarget(cspContent(), 'private')).toBe(cspContent());
+    expect(INDEX).not.toContain('api.tebrun.io');
     expect(cspForTarget(cspContent(), 'portal')).toBe(cspContent());
+    const priv = cspForTarget(cspContent(), 'private');
+    expect(directive(priv, 'connect-src')).toEqual(["'self'", 'http://localhost:8787']);
+    expect(priv).not.toContain('goatcounter');
+    expect(priv).not.toContain('api.tebrun.io');
   });
 
-  test("site adds the origin to connect-src and img-src only, keeping 'self'", () => {
+  test("site adds the stats origin to connect-src and img-src, and the leaderboard API to connect-src only, keeping 'self'", () => {
     const site = cspForTarget(cspContent(), 'site');
-    expect(directive(site, 'connect-src')).toEqual(["'self'", STATS_ORIGIN]);
+    expect(directive(site, 'connect-src')).toEqual(["'self'", STATS_ORIGIN, 'https://api.tebrun.io']);
+    expect(directive(site, 'img-src')).not.toContain('https://api.tebrun.io');
     expect(directive(site, 'img-src')).toEqual(["'self'", STATS_ORIGIN]);
     const others = site
       .split(';')
@@ -156,15 +161,15 @@ describe('CSP per build target (statistics only in the site build)', () => {
     const site = indexHtmlForTarget(INDEX, 'site');
     expect(site).toContain(`content="${cspForTarget(cspContent(), 'site')}"`);
     expect(indexHtmlForTarget(INDEX, 'portal')).toBe(INDEX);
-    expect(indexHtmlForTarget(INDEX, 'private')).toBe(INDEX);
+    expect(indexHtmlForTarget(INDEX, 'private')).toContain('http://localhost:8787');
     expect(() => indexHtmlForTarget('<html></html>', 'site')).toThrow(/no Content-Security-Policy/);
     // Le pagine di sviluppo (dev/*.html) non hanno CSP: in dev (private) passano intatte.
     expect(indexHtmlForTarget('<html></html>', 'private')).toBe('<html></html>');
   });
 
-  test('_headers carries the stats origin only where the site meta does', () => {
+  test('_headers carries the stats origin and the leaderboard API only where the site meta does', () => {
     const header = /^\s+Content-Security-Policy:\s*(.+)$/m.exec(HEADERS)?.[1] ?? '';
-    expect(directive(header, 'connect-src')).toEqual(["'self'", STATS_ORIGIN]);
+    expect(directive(header, 'connect-src')).toEqual(["'self'", STATS_ORIGIN, 'https://api.tebrun.io']);
     expect(directive(header, 'img-src')).toEqual(["'self'", STATS_ORIGIN]);
   });
 });

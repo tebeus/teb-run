@@ -7,6 +7,12 @@ import { go, type Screen, type ScreenPayloads, type Transition } from '../fsm';
 import { stageNumber } from '../shareCard';
 import { drawText } from '../text';
 import { drawRetryMenu, initialRetryMenu, stepRetryMenu, type RetryMenuState } from '../retryMenu';
+import { cyclePage, drawTabs, PAGE_LABELS, SCORES_PAGES, tabAt, type ScoresPage } from '../scoresPages';
+import { retryTarget } from '../endOfGame';
+import { challengeLabel } from '../dailySession';
+import { dailyChallenge, dailyKey } from '../../shared/daily';
+import type { SubmitResult } from '../../net/types';
+import type { Difficulty } from '../../types';
 
 export const SCORES_DURATION_S = 8;
 
@@ -32,45 +38,77 @@ export interface ScoresState {
   highlight?: number;
   /** Dopo le iniziali: RETRY con questo brano, e MENU. Assente, la TOP 10 del ciclo attrattivo. */
   retry?: { song: number; menu: RetryMenuState };
+  /** La pagina a schermo; assente vale LOCAL. */
+  page?: ScoresPage;
+  prevUp?: boolean;
+  prevDown?: boolean;
 }
 
-/** Valida il payload opzionale: un `highlight` numerico e un `retry` con il brano, o nessuno dei due. Pura. */
+/** Valida il payload opzionale: `highlight` numerico, `retry` con il brano, `page`, o niente. Pura. */
 export function parseScoresPayload(payload: unknown): ScreenPayloads['scores'] {
-  const p = payload as { highlight?: unknown; retry?: { song?: unknown } } | undefined;
+  const p = payload as { highlight?: unknown; retry?: { song?: unknown }; page?: unknown } | undefined;
   const highlight = p && typeof p.highlight === 'number' && Number.isFinite(p.highlight) ? { highlight: p.highlight } : {};
   const song = p?.retry?.song;
   const retry = typeof song === 'number' && Number.isInteger(song) && song >= 0 ? { retry: { song } } : {};
-  const out = { ...highlight, ...retry };
+  const page = SCORES_PAGES.includes(p?.page as ScoresPage) ? { page: p!.page as ScoresPage } : {};
+  const out = { ...highlight, ...retry, ...page };
   return Object.keys(out).length > 0 ? out : undefined;
 }
 
 /**
- * Nel ciclo attrattivo ENTER, un clic del mouse o 8 secondi portano al
+ * Nel ciclo attrattivo ENTER, un clic, un tocco o 8 secondi portano al
  * titolo, indipendentemente da quali altri tasti siano tenuti giù. Dopo le
- * iniziali, invece, RETRY e MENU senza tempo (`tap`: il tocco o il clic del
- * tick). Pura.
+ * iniziali, invece, RETRY e MENU senza tempo. In tutti e due i casi su e giù,
+ * o un clic o un tocco su una linguetta, cambiano pagina fra `pages` (e nel
+ * ciclo attrattivo il tempo riparte). `tap` è il tocco o il clic del tick;
+ * `retryTo` dice dove porta RETRY. Pura.
  */
 export function stepScores(
   state: ScoresState,
   dt: number,
   actions: Actions,
   tap: { x: number; y: number } | null = null,
+  pages: readonly ScoresPage[] = ['local'],
+  retryTo: (song: number) => Transition = (song) => go('race', { song }),
 ): { state: ScoresState; transition: Transition | null } {
+  const page = state.page ?? 'local';
+  const up = actions.accelerate && state.prevUp === false;
+  const down = actions.brake && state.prevDown === false;
+  const edges = { prevUp: actions.accelerate, prevDown: actions.brake };
+  const point = tap ?? actions.click ?? null;
+  const tab = point === null ? null : tabAt(pages, point);
+  const turned = tab ?? (up || down ? cyclePage(pages, page, up ? -1 : 1) : null);
+  // Una linguetta, o su e giù: un'altra pagina (con una pagina sola non c'è niente da girare).
+  if (turned !== null && pages.length > 1) {
+    const next: ScoresState = { ...state, ...edges, page: turned, t: state.retry === undefined ? 0 : state.t + dt };
+    if (state.retry !== undefined) next.retry = { song: state.retry.song, menu: stepRetryMenu(state.retry.menu, dt, { ...actions, confirm: false }, null).state };
+    return { state: next, transition: null };
+  }
   const t = state.t + dt;
   if (state.retry !== undefined) {
     const r = stepRetryMenu(state.retry.menu, dt, actions, tap);
-    const next: ScoresState = { t, highlight: state.highlight, retry: { song: state.retry.song, menu: r.state } };
-    if (r.chosen === 'retry') return { state: next, transition: go('race', { song: state.retry.song }) };
+    const next: ScoresState = { ...state, ...edges, t, retry: { song: state.retry.song, menu: r.state } };
+    if (r.chosen === 'retry') return { state: next, transition: retryTo(state.retry.song) };
     if (r.chosen === 'menu') return { state: next, transition: go('title', undefined) };
     return { state: next, transition: null };
   }
-  const next: ScoresState = { t, highlight: state.highlight };
+  const next: ScoresState = { ...state, ...edges, t };
   // +1e-9: la stessa tolleranza di core/loop.ts, per non perdere la soglia
   // per un residuo di virgola mobile dopo molte somme di dt piccoli.
-  if (actions.confirm || actions.click || t + 1e-9 >= SCORES_DURATION_S) {
+  if (actions.confirm || point !== null || t + 1e-9 >= SCORES_DURATION_S) {
     return { state: next, transition: go('title', undefined) };
   }
   return { state: next, transition: null };
+}
+
+/** La sigla di un'auto nella riga della classifica mondiale. Pura. */
+export function carShort(car: string): string {
+  return car.toUpperCase();
+}
+
+/** `#12 TODAY OF 40`: dove è entrata la partita appena mandata. Pura. */
+export function rankLine(result: SubmitResult): string {
+  return `#${result.rank} ${PAGE_LABELS[result.board]} OF ${result.total}`;
 }
 
 export function createScoresScreen(deps: ScreenDeps): Screen {
@@ -79,6 +117,19 @@ export function createScoresScreen(deps: ScreenDeps): Screen {
   // classifica non cambia sotto i piedi di questa schermata mentre è a
   // schermo, quindi non serve un getItem+parse a 60 Hz.
   let entries: ScoreEntry[] = [];
+  const retryTo = retryTarget(deps);
+  const now = (): Date => new Date(deps.now?.() ?? Date.now());
+
+  /** La modalità di una pagina: quella scelta, o quella della sfida di oggi per DAILY. */
+  const modeOf = (page: ScoresPage): Difficulty =>
+    page === 'daily' ? (deps.daily?.current()?.mode ?? dailyChallenge(dailyKey(now())).mode) : (deps.mode?.get() ?? 'normal');
+
+  /** Le pagine da mostrare: LOCAL sempre, le mondiali solo con i dati già arrivati. */
+  const pages = (): ScoresPage[] => {
+    const board = deps.board;
+    if (board === undefined) return ['local'];
+    return SCORES_PAGES.filter((p) => p === 'local' || board.top(modeOf(p), p) !== null);
+  };
 
   return {
     enter(payload) {
@@ -86,13 +137,19 @@ export function createScoresScreen(deps: ScreenDeps): Screen {
       state = {
         t: 0,
         highlight: parsed?.highlight,
+        page: parsed?.page ?? 'local',
+        prevUp: true,
+        prevDown: true,
         ...(parsed?.retry === undefined ? {} : { retry: { song: parsed.retry.song, menu: initialRetryMenu() } }),
       };
       entries = deps.scores.load();
       deps.signals?.takeTap();
+      // Le classifiche mondiali: chieste adesso, compaiono quando arrivano.
+      pages();
     },
     update(dt, actions) {
-      const r = stepScores(state, dt, actions, state.retry === undefined ? null : (deps.signals?.takeTap() ?? null));
+      // Il clic del mouse arriva anche come tocco (`takeTap`, ogni puntatore): una volta sola.
+      const r = stepScores(state, dt, { ...actions, click: null }, deps.signals?.takeTap() ?? null, pages(), retryTo);
       state = r.state;
       return r.transition;
     },
@@ -103,21 +160,51 @@ export function createScoresScreen(deps: ScreenDeps): Screen {
       // `screen.render` direttamente senza passare per `createApp`.
       ctx.fillStyle = '#101028';
       ctx.fillRect(0, 0, LOGICAL_W, LOGICAL_H);
-      drawText(ctx, 'TOP 10', LOGICAL_W / 2, 60, 4, '#ffffff', 'center');
-      // Una classifica per modalità: si dice quale.
-      if (deps.mode !== undefined) drawText(ctx, deps.mode.get().toUpperCase(), LOGICAL_W / 2, 100, 2, '#cccccc', 'center');
-      entries.forEach((entry, i) => {
-        const y = 140 + i * 40;
-        const on = i === state.highlight;
-        const color = on ? '#66ff66' : '#ffee55';
-        const col = SCORE_COLUMNS;
-        drawText(ctx, on ? '>' : ' ', col.marker, y, 2, color, 'left');
-        drawText(ctx, `${i + 1}`, col.rank, y, 2, '#cccccc', 'left');
-        drawText(ctx, entry.name, col.name, y, 2, color, 'left');
-        drawText(ctx, entry.score.toString().padStart(6, '0'), col.score, y, 2, '#ffffff', 'left');
-        drawText(ctx, stageLabel(entry.stageId), col.stage, y, 2, '#cccccc', 'left');
-        drawText(ctx, entry.route, col.route, y, 2, '#888888', 'left');
-      });
+      const shown = pages();
+      const page = shown.includes(state.page ?? 'local') ? (state.page ?? 'local') : 'local';
+      const tabs = shown.length > 1;
+      drawTabs(ctx, shown, page);
+      // Con le linguette in alto, titolo e righe scendono.
+      const top = tabs ? 24 : 0;
+      const mode = modeOf(page);
+      const submitted = deps.board?.submitted();
+      const result = submitted?.status === 'done' && submitted.result?.board === page ? submitted.result : null;
+      const col = SCORE_COLUMNS;
+      if (page === 'local') {
+        drawText(ctx, 'TOP 10', LOGICAL_W / 2, 60 + top, 4, '#ffffff', 'center');
+        // Una classifica per modalità: si dice quale.
+        if (deps.mode !== undefined) drawText(ctx, deps.mode.get().toUpperCase(), LOGICAL_W / 2, 100 + top, 2, '#cccccc', 'center');
+        entries.forEach((entry, i) => {
+          const y = 140 + top + i * 40;
+          const on = i === state.highlight;
+          const color = on ? '#66ff66' : '#ffee55';
+          drawText(ctx, on ? '>' : ' ', col.marker, y, 2, color, 'left');
+          drawText(ctx, `${i + 1}`, col.rank, y, 2, '#cccccc', 'left');
+          drawText(ctx, entry.name, col.name, y, 2, color, 'left');
+          drawText(ctx, entry.score.toString().padStart(6, '0'), col.score, y, 2, '#ffffff', 'left');
+          drawText(ctx, stageLabel(entry.stageId), col.stage, y, 2, '#cccccc', 'left');
+          drawText(ctx, entry.route, col.route, y, 2, '#888888', 'left');
+        });
+      } else {
+        const rows = deps.board?.top(mode, page) ?? [];
+        const daily = page === 'daily' ? (deps.daily?.current() ?? dailyChallenge(dailyKey(now()))) : null;
+        drawText(ctx, `WORLD ${PAGE_LABELS[page]}`, LOGICAL_W / 2, 60 + top, 4, '#ffffff', 'center');
+        const sub = daily !== null ? `${daily.key} · ${challengeLabel(daily)}` : mode.toUpperCase();
+        drawText(ctx, sub, LOGICAL_W / 2, 100 + top, 2, '#cccccc', 'center');
+        rows.forEach((row, i) => {
+          const y = 140 + top + i * 40;
+          const on = result !== null && result.rank === i + 1;
+          const color = on ? '#66ff66' : '#ffee55';
+          drawText(ctx, on ? '>' : ' ', col.marker, y, 2, color, 'left');
+          drawText(ctx, `${i + 1}`, col.rank, y, 2, '#cccccc', 'left');
+          drawText(ctx, row.initials, col.name, y, 2, color, 'left');
+          drawText(ctx, row.score.toString().padStart(6, '0'), col.score, y, 2, '#ffffff', 'left');
+          drawText(ctx, stageLabel(row.stageId), col.stage, y, 2, '#cccccc', 'left');
+          drawText(ctx, carShort(row.car), col.route, y, 2, '#888888', 'left');
+        });
+      }
+      if (result !== null) drawText(ctx, rankLine(result), LOGICAL_W / 2, 580, 3, '#66ff66', 'center');
+      if (tabs && (deps.device?.() ?? 'keyboard') !== 'touch') drawText(ctx, 'UP DOWN: PAGE', LOGICAL_W - 20, 84, 1, '#888888', 'right');
       if (state.retry !== undefined) drawRetryMenu(ctx, state.retry.menu, deps.device?.() ?? 'keyboard');
     },
   };

@@ -151,7 +151,7 @@ describe('createNameEntryScreen', () => {
     screen.update(1 / 60, emptyActions());
     const t = screen.update(1 / 60, { ...emptyActions(), right: true });
 
-    expect(t).toEqual(go('scores', { highlight: 0, retry: { song: 0 } }));
+    expect(t).toEqual(go('scores', { highlight: 0, retry: { song: 0 }, page: 'local' }));
     expect(scores.load()).toEqual([
       { name: 'AAA', score: 4200, stageId: '3-2', route: 'L R L', date: expect.any(String) },
     ]);
@@ -184,7 +184,7 @@ describe('createNameEntryScreen', () => {
     screen.update(1 / 60, emptyActions());
     const t = screen.update(1 / 60, { ...emptyActions(), right: true });
 
-    expect(t).toEqual(go('scores', { highlight: undefined, retry: { song: 0 } }));
+    expect(t).toEqual(go('scores', { highlight: undefined, retry: { song: 0 }, page: 'local' }));
   });
 
   test('a key held over from the previous screen on entry does not shortcut the three-letter entry', () => {
@@ -213,7 +213,7 @@ describe('createNameEntryScreen', () => {
     screen.update(1 / 60, emptyActions());
     const t = screen.update(1 / 60, { ...emptyActions(), right: true }); // 3rd real press: commits
 
-    expect(t).toEqual(go('scores', { highlight: 0, retry: { song: 0 } }));
+    expect(t).toEqual(go('scores', { highlight: 0, retry: { song: 0 }, page: 'local' }));
     expect(scores.load()).toEqual([
       { name: 'AAA', score: 4200, stageId: '3-2', route: 'L R L', date: expect.any(String) },
     ]);

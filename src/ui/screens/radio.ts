@@ -471,6 +471,11 @@ export function createRadioScreen(deps: ScreenDeps): Screen {
         drawRadioControls(ctx, device);
       }
 
+      // Nella sfida del giorno auto e modalità sono quelle della sfida: al
+      // posto di "C TO CHANGE" si dice che sono fissate.
+      const locked = deps.daily?.current() != null;
+      const changeLine = (key: 'C' | 'D'): string => (locked ? 'DAILY CHALLENGE' : radioChangeLine(device, key));
+
       // L'auto scelta (Set 7): anteprima del frame dritto e scritta.
       if (deps.car !== undefined) {
         const car = deps.car.get();
@@ -488,10 +493,10 @@ export function createRadioScreen(deps: ScreenDeps): Screen {
         if (look.touch) {
           const label = carLabel(car);
           drawTextOutlined(ctx, label, carX, box.y + 108, fitScale(label, box.w - 8), '#ffee55', 'center');
-          drawTextOutlined(ctx, radioChangeLine(device, 'C'), carX, box.y + 142, 2, '#ffffff', 'center');
+          drawTextOutlined(ctx, changeLine('C'), carX, box.y + 142, 2, '#ffffff', 'center');
         } else {
           drawTextOutlined(ctx, carLabel(car), RADIO_CAR_X, RADIO_CAR_LABEL_Y, 2, '#ffee55', 'center');
-          drawTextOutlined(ctx, radioChangeLine(device, 'C'), RADIO_CAR_X, RADIO_CAR_HINT_Y, 1, '#e8e8e8', 'center');
+          drawTextOutlined(ctx, changeLine('C'), RADIO_CAR_X, RADIO_CAR_HINT_Y, 1, '#e8e8e8', 'center');
         }
       }
 
@@ -503,10 +508,10 @@ export function createRadioScreen(deps: ScreenDeps): Screen {
           const label = modeLabel(mode);
           buttonFrame(ctx, box);
           drawTextOutlined(ctx, label, box.x + box.w / 2, box.y + 24, fitScale(label, box.w - 8), RADIO_MODE_COLORS[mode], 'center');
-          drawTextOutlined(ctx, radioChangeLine(device, 'D'), box.x + box.w / 2, box.y + 70, 2, '#ffffff', 'center');
+          drawTextOutlined(ctx, changeLine('D'), box.x + box.w / 2, box.y + 70, 2, '#ffffff', 'center');
         } else {
           drawTextOutlined(ctx, modeLabel(mode), RADIO_MODE_X, RADIO_CAR_LABEL_Y, 2, RADIO_MODE_COLORS[mode], 'center');
-          drawTextOutlined(ctx, radioChangeLine(device, 'D'), RADIO_MODE_X, RADIO_CAR_HINT_Y, 1, '#e8e8e8', 'center');
+          drawTextOutlined(ctx, changeLine('D'), RADIO_MODE_X, RADIO_CAR_HINT_Y, 1, '#e8e8e8', 'center');
         }
       }
 

@@ -9,7 +9,9 @@ import { createLoop } from './core/loop';
 import { createSystemSignals } from './core/signals';
 import { STATS_ENABLED, STATS_ENDPOINT } from './core/config';
 import { browserStatsEnv, createStats, NO_STATS, STAT_EVENTS, trackRace } from './core/stats';
-import { debugHookOn, FEATURES, SDK_BUILD, STATS_BUILD } from './core/target';
+import { API_IS_PRODUCTION, debugHookOn, FEATURES, SDK_BUILD, STATS_BUILD, WORLD_BOARD_BUILD } from './core/target';
+import { API_ORIGIN, DEV_API_ORIGIN } from './core/config';
+import { createBoardClient } from './net/board';
 import { AD_ENV, GAMEPLAY, PORTAL_SDK } from './core/gameplayEvents';
 import { createTilt } from './core/tilt';
 import { carFromSearch } from './game/car';
@@ -19,6 +21,9 @@ import { REAL_GRAPH, STAGES } from './game/stages';
 import { createDefaultCarSetting } from './persist/car';
 import { createDefaultModeSetting } from './persist/mode';
 import { createDefaultScoresStore } from './persist/scores';
+import { createDailyStore, createInitialsMemory, defaultStorage } from './persist/daily';
+import { dailyGraph } from './game/daily';
+import { createDailySession, sessionCar, sessionMode } from './ui/dailySession';
 import { createDefaultTiltSeenSetting, createDefaultTiltSetting } from './persist/tilt';
 import { renderWorld } from './render/world';
 import { createApp } from './ui/app';
@@ -107,7 +112,11 @@ function markAssetPhase(phase: 'initial' | 'all'): void {
 async function main(): Promise<void> {
   // Auto del giocatore (Set 7): `?car=new|classic|retro|sport|super` vince su quella
   // ricordata; senza nessuna delle due è la cabrio nuova.
-  const car = createDefaultCarSetting(carFromSearch(window.location.search));
+  const chosenCar = createDefaultCarSetting(carFromSearch(window.location.search));
+  // La sfida giornaliera (spec classifica e sfida, §3): mentre è in corso
+  // auto e modalità sono le sue, senza toccare la scelta salvata.
+  const daily = createDailySession();
+  const car = sessionCar(chosenCar, daily);
   const graph = REAL_GRAPH;
   // Caricamento a fasi (lancio, punto 12): prima solo titolo, radio e prima
   // tappa con l'auto scelta adesso; il resto arriva in background.
@@ -123,9 +132,26 @@ async function main(): Promise<void> {
   }
   // Modalità (collaudo utente: due livelli di difficoltà): `?mode=normal|hard`
   // vince su quella ricordata; senza nessuna delle due è NORMAL.
-  const mode = createDefaultModeSetting(modeFromSearch(window.location.search));
+  const mode = sessionMode(createDefaultModeSetting(modeFromSearch(window.location.search)), daily);
   // Una classifica per modalità: quella della modalità scelta in quel momento.
+  // Le partite DAILY non ci entrano (traffico diverso): lo decidono le schermate di fine partita.
   const scores = createDefaultScoresStore(() => mode.get());
+  const storage = defaultStorage();
+  const dailyStore = createDailyStore(storage);
+  const initials = createInitialsMemory(storage);
+  // La classifica mondiale (spec classifica e sfida, §2.7): nella build site
+  // verso api.tebrun.io; nella privata solo con `?board=local`, verso
+  // `wrangler dev` (cartella api/); nelle build portal e crazygames il
+  // bundler toglie tutto, indirizzo compreso.
+  const boardOrigin = API_IS_PRODUCTION
+    ? API_ORIGIN
+    : new URLSearchParams(window.location.search).get('board') === 'local'
+      ? DEV_API_ORIGIN
+      : null;
+  const board =
+    WORLD_BOARD_BUILD && boardOrigin !== null
+      ? createBoardClient({ origin: boardOrigin, fetch: (url, init) => window.fetch(url, init), now: () => performance.now() })
+      : undefined;
   // Statistiche senza cookie (lancio, punto 11): solo build site, mai in locale.
   const stats = STATS_BUILD && FEATURES.stats ? createStats(STATS_ENABLED, STATS_ENDPOINT, browserStatsEnv(window)) : NO_STATS;
   stats.pageview();
@@ -187,17 +213,30 @@ async function main(): Promise<void> {
     // Ricordato acceso e in attesa del permesso conta già come acceso, come per i pulsanti.
     tiltOn: () => tilt.on || tilt.pending,
     tiltAsking: () => tilt.asking === true,
+    daily,
+    dailyStore,
+    initials,
+    ...(board === undefined ? {} : { board }),
     ...(SDK_BUILD ? { inputLocked: () => GAMEPLAY.adRunning() } : {}),
     raceFactory: (stage, a) => {
       // La modalità si legge qui, alla partenza: la radio la cambia solo
       // prima della gara, e il motore la trova nelle tappe del grafo.
       const chosen = mode.get();
-      const moded = withMode((startStageId === null ? undefined : STAGES.get(startStageId)) ?? stage, chosen);
+      // Nella sfida del giorno anche il traffico del giorno, in ogni tappa.
+      const challenge = daily.current();
+      const salted = (s: typeof stage) => (challenge === null ? s : { ...s, trafficSalt: challenge.trafficSalt });
+      const moded = salted(withMode((startStageId === null ? undefined : STAGES.get(startStageId)) ?? stage, chosen));
       const startStage = startTimeLimit === null ? moded : { ...moded, timeLimit: startTimeLimit };
-      const race = createFullRace({ graph: modeGraph(graph, chosen), assets: a, startStage });
+      const moddedGraph = modeGraph(graph, chosen);
+      const race = createFullRace({
+        graph: challenge === null ? moddedGraph : dailyGraph(moddedGraph, challenge.trafficSalt),
+        assets: a,
+        startStage,
+      });
       if (debugOn()) lastRace = race;
       stats.startGame(chosen, car.get());
-      return trackRace(race, stats, startStage.id);
+      if (challenge !== null) stats.event(STAT_EVENTS.dailyStart());
+      return trackRace(race, stats, startStage.id, challenge !== null);
     },
     // La strada del titolo gira su `createRace`: nessun traffico, nessun
     // tempo, nessun incidente, quindi la modalità attrattiva non finisce mai.

@@ -85,10 +85,16 @@ async function canvasPrint(page: Page): Promise<string> {
  * fallite. Le build pubbliche non accendono `#debug`: niente
  * `window.__tebrun`, lo stato si guarda dalla rete e dai pixel.
  */
-async function playFrom(page: Page, url: string): Promise<{ errors: string[]; failed: string[]; sprites: number }> {
+async function playFrom(page: Page, url: string): Promise<{ errors: string[]; failed: string[]; sprites: number; api: string[] }> {
   const errors: string[] = [];
   const failed: string[] = [];
+  const api: string[] = [];
   let sprites = 0;
+  // La classifica mondiale (solo site): finta, nessuna richiesta esce.
+  await page.route('https://api.tebrun.io/**', (route) => {
+    api.push(route.request().url());
+    return route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: '{"rows":[]}' });
+  });
   page.on('pageerror', (error) => errors.push(error.message));
   page.on('console', (msg) => {
     if (msg.type() === 'error') errors.push(msg.text());
@@ -115,13 +121,16 @@ async function playFrom(page: Page, url: string): Promise<{ errors: string[]; fa
   const after = await canvasPrint(page);
   await page.keyboard.up('ArrowUp');
   expect(after).not.toBe(before);
-  return { errors, failed, sprites };
+  return { errors, failed, sprites, api };
 }
 
 for (const [target, folder] of Object.entries(FOLDERS)) {
   test(`${target} build from /${folder}/: title, radio and race load with no error and no 404`, async ({ page }) => {
     const before = notFound.length;
-    const { errors, failed, sprites } = await playFrom(page, `${ORIGIN}/${folder}/#debug`);
+    const { errors, failed, sprites, api } = await playFrom(page, `${ORIGIN}/${folder}/#debug`);
+    // La classifica mondiale: la site chiede la top di oggi alla partenza; la portal non chiama mai.
+    if (target === 'site') expect(api).toContain('https://api.tebrun.io/top?mode=normal&board=today');
+    else expect(api).toEqual([]);
     // Ogni richiesta è rimasta nella sottocartella.
     expect(sprites).toBeGreaterThan(100);
     await page.screenshot({ path: `e2e/out/subfolder-${target}.png` });

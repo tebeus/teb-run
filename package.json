@@ -15,8 +15,10 @@
     "build:portal": "tsc --noEmit && vite build --mode portal && node tools/zip-build.mjs dist-portal dist-portal.zip",
     "build:crazygames": "tsc --noEmit && vite build --mode crazygames && node tools/zip-build.mjs dist-crazygames dist-crazygames.zip",
     "check:builds": "node tools/check-builds.mjs",
+    "gen:limits": "GEN_LIMITS=1 vitest run tests/shared/limits-table.test.ts",
     "preview": "vite preview",
     "test": "vitest run",
+    "test:api": "npm --prefix api test && npm --prefix api run typecheck",
     "test:watch": "vitest",
     "e2e": "playwright test",
     "e2e:install": "playwright install chromium"

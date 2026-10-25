@@ -3,7 +3,7 @@ import { GLYPHS, drawText, measureText } from '../../src/ui/text';
 
 const SUPPORTED = [
   ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789".split(''),
-  ' ', '.', ',', ':', '!', '?', '-', "'", '"', '/', '<', '>', '^', '+',
+  ' ', '.', ',', ':', '!', '?', '-', "'", '"', '/', '<', '>', '^', '+', '#', '·',
 ];
 
 interface RectCall {
@@ -45,15 +45,15 @@ describe('bitmap font glyphs', () => {
     expect(GLYPHS['?']).toBeDefined();
   });
 
-  test('there are exactly the 50 supported characters plus the fallback (already counted)', () => {
-    expect(new Set(SUPPORTED).size).toBe(50);
+  test('there are exactly the 52 supported characters plus the fallback (already counted)', () => {
+    expect(new Set(SUPPORTED).size).toBe(52);
     // La riga sopra conta solo il proprio elenco locale: qui si confronta con
     // le chiavi vere di GLYPHS, così un glifo aggiunto o tolto in text.ts
     // (senza toccare SUPPORTED) fa fallire il test invece di passare a vuoto.
     // '?' è già dentro SUPPORTED (è anche un carattere legittimo, non solo il
-    // ripiego), quindi GLYPHS non ha una chiave in più oltre ai 50.
+    // ripiego), quindi GLYPHS non ha una chiave in più oltre ai 52.
     const keys = Object.keys(GLYPHS);
-    expect(keys).toHaveLength(50);
+    expect(keys).toHaveLength(52);
     expect(new Set(keys)).toEqual(new Set(SUPPORTED));
   });
 

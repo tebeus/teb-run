@@ -27,9 +27,9 @@ describe('build target', () => {
 
   test('classic car only in private, stats only in site, new-tab links in portal and crazygames', () => {
     const rest = { fullscreenButton: true, aboutLink: true, share: true, portalSdk: false, radioTimer: false, goalLine: false };
-    expect(featuresOf('private')).toEqual({ classicCar: true, stats: false, linksInNewTab: false, debugHook: true, ...rest });
-    expect(featuresOf('site')).toEqual({ classicCar: false, stats: true, linksInNewTab: false, debugHook: false, ...rest });
-    expect(featuresOf('portal')).toEqual({ classicCar: false, stats: false, linksInNewTab: true, debugHook: false, ...rest });
+    expect(featuresOf('private')).toEqual({ classicCar: true, stats: false, linksInNewTab: false, debugHook: true, worldBoard: true, ...rest });
+    expect(featuresOf('site')).toEqual({ classicCar: false, stats: true, linksInNewTab: false, debugHook: false, worldBoard: true, ...rest });
+    expect(featuresOf('portal')).toEqual({ classicCar: false, stats: false, linksInNewTab: true, debugHook: false, worldBoard: false, ...rest });
   });
 
   test('crazygames starts from portal, without fullscreen button, ABOUT and SHARE, with the gameplay events point', () => {
@@ -44,6 +44,8 @@ describe('build target', () => {
       portalSdk: true,
       radioTimer: true,
       goalLine: true,
+      // Finché CrazyGames non risponde (spec §6): solo la sfida in locale.
+      worldBoard: false,
     });
   });
 
@@ -63,6 +65,13 @@ describe('build target', () => {
     const main = readFileSync(root('src/main.ts'), 'utf8');
     expect(main).toMatch(/debugHookOn\(FEATURES, window\.location\.hash, DEBUG_HASH\)/);
     expect(main).not.toMatch(/window\.location\.hash\s*===/);
+  });
+});
+
+describe('the leaderboard API origin', () => {
+  test('api. on the site domain, written out in full', async () => {
+    const { API_ORIGIN, SITE_DOMAIN } = await import('../../src/core/config');
+    expect(API_ORIGIN).toBe(`https://api.${SITE_DOMAIN}`);
   });
 });
 
@@ -86,6 +95,8 @@ describe('build-time constants', () => {
     expect(m.SDK_BUILD).toBe(m.FEATURES.portalSdk);
     expect(m.RADIO_TIMER_BUILD).toBe(m.FEATURES.radioTimer);
     expect(m.GOAL_LINE_BUILD).toBe(m.FEATURES.goalLine);
+    expect(m.WORLD_BOARD_BUILD).toBe(m.FEATURES.worldBoard);
+    expect(m.API_IS_PRODUCTION).toBe(target === 'site');
   });
 });
 

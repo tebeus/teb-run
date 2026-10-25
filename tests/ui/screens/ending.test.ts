@@ -36,7 +36,7 @@ describe('stepEnding', () => {
 
   test('confirm before the duration routes to nameEntry when qualifying, with stageId extracted from the stage', () => {
     const r = stepEnding(state(true, 1), 1 / 60, { ...emptyActions(), confirm: true });
-    expect(r.transition).toEqual(go('nameEntry', { score: 900, stageId: '4-1', route: ['L', 'R'] }));
+    expect(r.transition).toEqual(go('nameEntry', { score: 900, stageId: '4-1', route: ['L', 'R'], ending: 1 }));
   });
 
   test('confirm before the duration is RETRY when not qualifying, with the same song', () => {
@@ -56,7 +56,7 @@ describe('stepEnding', () => {
       transition = r.transition;
       if (transition) break;
     }
-    expect(transition).toEqual(go('nameEntry', { score: 900, stageId: '4-1', route: ['L', 'R'] }));
+    expect(transition).toEqual(go('nameEntry', { score: 900, stageId: '4-1', route: ['L', 'R'], ending: 1 }));
   });
 });
 
@@ -136,7 +136,7 @@ describe('createEndingScreen', () => {
     const screen = createEndingScreen(makeEndingDeps(scores));
     expect(() => screen.enter(undefined)).not.toThrow();
     const r = screen.update(1 / 60, { ...emptyActions(), confirm: true });
-    expect(r).toEqual(go('nameEntry', { score: 0, stageId: fallbackStage.id, route: [] }));
+    expect(r).toEqual(go('nameEntry', { score: 0, stageId: fallbackStage.id, route: [], ending: 0 }));
   });
 });
 

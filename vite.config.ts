@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { cpSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { defineConfig, type Plugin } from 'vite';
-import { GAME_NAME, STATS_ORIGIN } from './src/core/config.ts';
+import { API_ORIGIN, DEV_API_ORIGIN, GAME_NAME, STATS_ORIGIN } from './src/core/config.ts';
 import type { Target } from './src/core/target.ts';
 
 /**
@@ -65,21 +65,30 @@ export const CRAZYGAMES_CSP = "object-src 'none'; base-uri 'self'";
 /**
  * La CSP di `target` a partire da quella di index.html (`base`): la build site
  * aggiunge l'origine delle statistiche a connect-src (sendBeacon) e a img-src
- * (il ripiego con un'immagine), e a nient'altro; private e portal tengono
- * `base` così com'è. connect-src, se manca, parte da 'self' come il
- * default-src che sostituisce. Pura.
+ * (il ripiego con un'immagine), e quella della classifica mondiale
+ * (api.tebrun.io) a connect-src; la privata aggiunge a connect-src solo
+ * `wrangler dev` (la classifica con `?board=local`); portal tiene `base` così
+ * com'è. connect-src, se manca, parte da 'self' come il default-src che
+ * sostituisce. Pura.
  */
 export function cspForTarget(base: string, target: Target): string {
   if (target === 'crazygames') return CRAZYGAMES_CSP;
-  if (target !== 'site') return base;
+  if (target === 'portal') return base;
   const directives = base
     .split(';')
     .map((d) => d.trim())
     .filter((d) => d !== '');
-  for (const name of ['img-src', 'connect-src']) {
+  const add = (name: string, origin: string): void => {
     const i = directives.findIndex((d) => d.split(/\s+/)[0] === name);
-    if (i < 0) directives.push(`${name} 'self' ${STATS_ORIGIN}`);
-    else if (!directives[i].split(/\s+/).includes(STATS_ORIGIN)) directives[i] = `${directives[i]} ${STATS_ORIGIN}`;
+    if (i < 0) directives.push(`${name} 'self' ${origin}`);
+    else if (!directives[i].split(/\s+/).includes(origin)) directives[i] = `${directives[i]} ${origin}`;
+  };
+  if (target === 'private') {
+    add('connect-src', DEV_API_ORIGIN);
+  } else {
+    add('img-src', STATS_ORIGIN);
+    add('connect-src', STATS_ORIGIN);
+    add('connect-src', API_ORIGIN);
   }
   return directives.join('; ');
 }
@@ -91,7 +100,9 @@ export function cspForTarget(base: string, target: Target): string {
  */
 export function indexHtmlForTarget(html: string, target: Target): string {
   const re = /(<meta\s+http-equiv="Content-Security-Policy"\s+content=")([^"]+)(")/;
-  if (target !== 'site' && target !== 'crazygames') return html;
+  if (target === 'portal') return html;
+  // In sviluppo (private) le pagine dev/*.html non hanno CSP: passano intatte.
+  if (target === 'private' && !re.test(html)) return html;
   if (!re.test(html)) throw new Error('index.html: no Content-Security-Policy meta tag');
   return html.replace(re, (_m, a: string, csp: string, b: string) => `${a}${cspForTarget(csp, target)}${b}`);
 }

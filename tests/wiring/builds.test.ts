@@ -14,6 +14,7 @@ import {
   checkBuild,
   crazyGamesProblems,
   cspProblems,
+  apiCspProblems,
   MAX_FILES,
   MAX_INITIAL_BYTES,
   MAX_TOTAL_BYTES,
@@ -186,6 +187,33 @@ describe('cspProblems: the stats origin only in the site build, only in connect-
       'CSP connect-src names tebrun.goatcounter.com',
     );
     expect(cspProblems('<html>', 'portal')).toEqual(['no Content-Security-Policy meta in index.html']);
+  });
+});
+
+describe('apiCspProblems: the leaderboard API only in the site build, only in connect-src', () => {
+  const API = 'https://api.tebrun.io';
+  test('the right site policy passes; a missing or misplaced origin fails; elsewhere it must not appear', () => {
+    expect(apiCspProblems(`default-src 'self'; connect-src 'self' ${API}`, 'site')).toEqual([]);
+    expect(apiCspProblems("default-src 'self'; connect-src 'self'", 'site')).toEqual([`CSP connect-src lacks ${API}`]);
+    expect(apiCspProblems(`default-src 'self' ${API}; connect-src 'self' ${API}`, 'site')).toEqual(['CSP default-src names api.tebrun.io']);
+    expect(apiCspProblems("default-src 'self'", 'portal')).toEqual([]);
+    expect(apiCspProblems(`connect-src 'self' ${API}`, 'portal')).toContain('CSP names api.tebrun.io outside the site build');
+    expect(apiCspProblems(`connect-src 'self' ${API}`, 'crazygames', '_headers')).toContain('_headers connect-src names api.tebrun.io');
+  });
+
+  test('a file naming the API or the dev API outside the site build', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'check-build-api-'));
+    try {
+      mkdirSync(join(dir, 'sprites'));
+      writeFileSync(join(dir, 'sprites', 'manifest.json'), '{}');
+      writeFileSync(join(dir, 'index.html'), `<meta http-equiv="Content-Security-Policy" content="default-src 'self'" />`);
+      writeFileSync(join(dir, 'a.js'), 'fetch("https://api.tebrun.io/top");fetch("http://localhost:8787/x")');
+      const problems = checkBuild(dir, [], 'portal') as string[];
+      expect(problems).toContain('a.js names api.tebrun.io in the portal build');
+      expect(problems).toContain('a.js names the dev API localhost:8787');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 

@@ -315,7 +315,8 @@ export function trafficSpan(segmentCount: number): { from: number; to: number } 
  * "sempre" più facile.
  */
 export function spawnTraffic(segments: Segment[], stage: StageDef): Car[] {
-  const rng = mulberry32(trafficSeed(stage.seed));
+  // Il sale della sfida del giorno cambia solo il seme: il resto qui sotto è uguale.
+  const rng = mulberry32(trafficSeed((stage.seed ^ (stage.trafficSalt ?? 0)) >>> 0));
   const { from, to } = trafficSpan(segments.length);
   const span = to - from;
   const count = trafficCountFor(stage);

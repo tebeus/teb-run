@@ -11,6 +11,11 @@ import { go, type Screen, type ScreenPayloads, type Transition } from '../fsm';
 import { drawText, drawTextOutlined } from '../text';
 import { engineParams } from './race';
 import { titleStartLine } from '../controlsHelp';
+import { inside, type Rect } from '../rect';
+import { DAILY_RECT } from '../titleLayout';
+import { drawMenuButton } from '../retryMenu';
+import { challengeLabel } from '../dailySession';
+import { dailyChallenge, dailyKey } from '../../shared/daily';
 
 /**
  * Ciclo attrattivo (spec §11): tre fasi da `ATTRACT_PHASE_S` secondi che
@@ -65,10 +70,26 @@ export const ATTRACT_SHIFT_PERCENT = 0.5;
 export interface TitleState {
   idleT: number;
   blinkT: number;
+  /** La voce accesa per ENTER: START (come sempre) o DAILY, scelta con su e giù. */
+  choice: 'start' | 'daily';
+  prevUp: boolean;
+  prevDown: boolean;
 }
 
 export function initialTitleState(): TitleState {
-  return { idleT: 0, blinkT: 0 };
+  return { idleT: 0, blinkT: 0, choice: 'start', prevUp: true, prevDown: true };
+}
+
+export { DAILY_RECT };
+
+/**
+ * Il pulsante DAILY CHALLENGE (`titleLayout.ts`) si vede in questa fase?
+ * Nella fase mappa del ciclo attrattivo no (coprirebbe il triangolo delle
+ * tappe): lì ogni tocco o clic vale START, come prima, e riporta il ciclo
+ * alla fase del titolo, dove il pulsante c'è. Pura.
+ */
+export function dailyShown(phase: AttractPhase): boolean {
+  return phase !== 'map';
 }
 
 /** Il titolo non riceve mai un payload utile: lo ignora, non lancia mai. Pura. */
@@ -90,10 +111,28 @@ export function stepTitle(
   state: TitleState,
   dt: number,
   actions: Actions,
+  /** C'è la sfida giornaliera? Senza, il titolo è quello di sempre. */
+  daily = false,
 ): { state: TitleState; transition: Transition | null } {
-  if (actions.confirm || actions.click) {
-    return { state, transition: go('radio', undefined) };
+  const up = actions.accelerate;
+  const down = actions.brake;
+  const edges = { prevUp: up, prevDown: down };
+  if (daily) {
+    // Il dito sul pulsante, o il clic del mouse sopra: la sfida, subito.
+    const shown = dailyShown(attractPhase(state.idleT));
+    if (shown && (actions.daily || (actions.click && inside(DAILY_RECT, actions.click.x, actions.click.y)))) {
+      return { state: { ...state, ...edges }, transition: go('daily', undefined) };
+    }
   }
+  if (actions.confirm || actions.click || actions.daily) {
+    const to = daily && state.choice === 'daily' && !actions.click ? go('daily', undefined) : go('radio', undefined);
+    return { state: { ...state, ...edges }, transition: to };
+  }
+
+  // Su e giù (tastiera, croce del gamepad) cambiano voce; il fronte, perché
+  // sono azioni tenute. Con ENTER nello stesso tick (A = gas e conferma) vince ENTER, sopra.
+  let choice = state.choice;
+  if (daily && ((up && !state.prevUp) || (down && !state.prevDown))) choice = choice === 'start' ? 'daily' : 'start';
 
   const idleT = anyActionHeld(actions) ? 0 : state.idleT + dt;
   const blinkT = state.blinkT + dt;
@@ -101,9 +140,9 @@ export function stepTitle(
   // +1e-9: la stessa tolleranza di core/loop.ts, per non perdere la soglia
   // per un residuo di virgola mobile dopo molte somme di dt piccoli.
   if (idleT + 1e-9 >= ATTRACT_CYCLE_S) {
-    return { state: { idleT: 0, blinkT }, transition: go('scores', undefined) };
+    return { state: { ...state, idleT: 0, blinkT, choice, ...edges }, transition: go('scores', undefined) };
   }
-  return { state: { idleT, blinkT }, transition: null };
+  return { state: { ...state, idleT, blinkT, choice, ...edges }, transition: null };
 }
 
 /** Periodo del lampeggio di "PRESS ENTER", in secondi. */
@@ -210,6 +249,8 @@ export function createTitleScreen(deps: ScreenDeps): Screen {
     enter(payload) {
       parseTitlePayload(payload);
       state = initialTitleState();
+      // Il titolo chiude la sfida giornaliera: da qui auto e modalità sono di nuovo quelle scelte.
+      deps.daily?.stop();
       engine = factory(deps.firstStage, deps.assets);
       snapshot = engine.snapshot();
       // Letta una volta qui, non a ogni fotogramma: come l'engine e lo
@@ -222,7 +263,7 @@ export function createTitleScreen(deps: ScreenDeps): Screen {
         engine.update(dt, attractActions(snapshot));
         snapshot = engine.snapshot();
       }
-      const r = stepTitle(state, dt, actions);
+      const r = stepTitle(state, dt, actions, deps.daily !== undefined);
       state = r.state;
       return r.transition;
     },
@@ -249,8 +290,11 @@ export function createTitleScreen(deps: ScreenDeps): Screen {
         // basso, livello 0, sta a cy ≈ 648 su LOGICAL_H = 720): più in
         // basso, fuori dal triangolo dei quindici nodi.
         const y = phase === 'map' ? PRESS_ENTER_MAP_Y : PRESS_ENTER_Y;
-        drawTextOutlined(ctx, titleStartLine(deps.device?.() ?? 'keyboard'), LOGICAL_W / 2, y, 3, '#ffffff', 'center');
+        const line = titleStartLine(deps.device?.() ?? 'keyboard');
+        // Con DAILY scelto da tastiera o gamepad la partenza normale si spegne un po'.
+        drawTextOutlined(ctx, line, LOGICAL_W / 2, y, 3, state.choice === 'daily' ? '#888888' : '#ffffff', 'center');
       }
+      if (deps.daily !== undefined && dailyShown(phase)) drawDailyButton(ctx, DAILY_RECT, state.choice === 'daily', deps.now);
     },
     exit() {
       // Il motore dell'autopilota va buttato: tiene un array di segmenti per
@@ -260,4 +304,15 @@ export function createTitleScreen(deps: ScreenDeps): Screen {
       snapshot = null;
     },
   };
+}
+
+/**
+ * DAILY CHALLENGE, con la sfida di oggi in piccolo (`RETRO · HARD`): acceso
+ * quando la tastiera o il gamepad lo scelgono.
+ */
+function drawDailyButton(ctx: CanvasRenderingContext2D, r: Rect, lit: boolean, now?: () => number): void {
+  const challenge = dailyChallenge(dailyKey(new Date(now?.() ?? Date.now())));
+  drawMenuButton(ctx, r, '', 1, lit);
+  drawTextOutlined(ctx, 'DAILY CHALLENGE', r.x + r.w / 2, r.y + 18, 4, lit ? '#ffee55' : '#ffffff', 'center');
+  drawTextOutlined(ctx, `TODAY: ${challengeLabel(challenge)}`, r.x + r.w / 2, r.y + 64, 2, '#cccccc', 'center');
 }

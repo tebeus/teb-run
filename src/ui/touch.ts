@@ -21,6 +21,7 @@ import type { TiltControl } from '../core/tilt';
 import type { Actions } from '../types';
 import type { ScreenName } from './fsm';
 import { inside, touchRect, type Rect } from './rect';
+import { DAILY_RECT } from './titleLayout';
 import {
   MOTION_BLOCKED_LINES,
   MOTION_BLOCKED_SECONDS,
@@ -140,7 +141,12 @@ export function touchLayout(screen: ScreenName, opts: LayoutOptions): TouchButto
     case 'title':
       // Tocca ovunque per iniziare, tranne la fascia bassa: lì ci sono i
       // link e lo schermo intero, gestiti da `launchUi`.
-      return [{ id: 'start', rect: r(0, 0, LOGICAL_W, 630), action: 'confirm', kind: 'tap', hidden: true }];
+      // DAILY CHALLENGE prima: `buttonAt` prova i nascosti nell'ordine (il
+      // pulsante lo disegna il titolo, che sa se c'è).
+      return [
+        { id: 'daily', rect: DAILY_RECT, action: 'daily', kind: 'tap', hidden: true },
+        { id: 'start', rect: r(0, 0, LOGICAL_W, 630), action: 'confirm', kind: 'tap', hidden: true },
+      ];
     case 'radio': {
       const buttons: TouchButton[] = [
         { id: 'back', rect: RADIO_BACK_RECT, action: 'back', kind: 'tap', label: 'BACK' },
@@ -198,7 +204,9 @@ export function touchLayout(screen: ScreenName, opts: LayoutOptions): TouchButto
       // stesse (`retryMenu.ts`, con `signals.takeTap`): qui niente.
       return [];
     case 'scores':
-      return [{ id: 'skip', rect: r(0, 0, LOGICAL_W, LOGICAL_H), action: 'confirm', kind: 'tap', hidden: true }];
+      // Linguette delle pagine, RETRY e MENU, e "tocca per tornare al
+      // titolo": li legge la schermata stessa (`signals.takeTap`).
+      return [];
     default:
       return [];
   }

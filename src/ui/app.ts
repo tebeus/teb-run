@@ -8,6 +8,7 @@ import { createRaceScreen } from './screens/race';
 import { createRadioScreen } from './screens/radio';
 import { createScoresScreen } from './screens/scores';
 import { createTitleScreen } from './screens/title';
+import { createDailyScreen } from './screens/daily';
 import { createWipe } from './transition';
 
 /**
@@ -23,6 +24,7 @@ import { createWipe } from './transition';
 export function createApp(deps: ScreenDeps): Fsm {
   const screens: Record<ScreenName, Screen> = {
     title: createTitleScreen(deps),
+    daily: createDailyScreen(deps),
     radio: createRadioScreen(deps),
     race: createRaceScreen(deps),
     ending: createEndingScreen(deps),

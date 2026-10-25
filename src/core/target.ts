@@ -52,6 +52,13 @@ export interface TargetFeatures {
   /** Alla prima gara della sessione una riga che dice l'obiettivo. */
   goalLine: boolean;
   /**
+   * La classifica mondiale (`api.tebrun.io`, `net/board.ts`): solo il sito
+   * proprio e la privata (contro `wrangler dev`). Il portal per scelta non fa
+   * chiamate esterne; crazygames aspetta la risposta del portale (spec
+   * classifica e sfida, §6). La sfida giornaliera c'è ovunque, in locale.
+   */
+  worldBoard: boolean;
+  /**
    * Il gancio di diagnostica `#debug` (`window.__tebrun`, per gli e2e): solo
    * privata e sviluppo. Nelle build pubbliche `#debug` non fa niente.
    */
@@ -71,6 +78,7 @@ export function featuresOf(target: Target): TargetFeatures {
     portalSdk: target === 'crazygames',
     radioTimer: target === 'crazygames',
     goalLine: target === 'crazygames',
+    worldBoard: target === 'site' || target === 'private',
   };
 }
 
@@ -108,3 +116,11 @@ export const SHARE_BUILD: boolean = import.meta.env.VITE_TARGET !== 'crazygames'
 export const SDK_BUILD: boolean = import.meta.env.VITE_TARGET === 'crazygames';
 export const RADIO_TIMER_BUILD: boolean = import.meta.env.VITE_TARGET === 'crazygames';
 export const GOAL_LINE_BUILD: boolean = import.meta.env.VITE_TARGET === 'crazygames';
+/**
+ * La classifica mondiale: nelle build portal e crazygames il bundler toglie
+ * il client di rete e l'indirizzo dell'API (`check:builds` lo controlla).
+ */
+export const WORLD_BOARD_BUILD: boolean =
+  import.meta.env.VITE_TARGET !== 'portal' && import.meta.env.VITE_TARGET !== 'crazygames';
+/** L'API vera solo nella build del sito; la privata parla con `wrangler dev`. */
+export const API_IS_PRODUCTION: boolean = import.meta.env.VITE_TARGET === 'site';
