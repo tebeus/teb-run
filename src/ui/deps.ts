@@ -9,6 +9,7 @@ import type { ShareSlot } from './share';
 import type { InputDevice } from '../core/device';
 import type { DailySession } from './dailySession';
 import type { DailyStore, InitialsMemory } from '../persist/daily';
+import type { StreakStore } from '../persist/streak';
 import type { BoardClient } from '../net/types';
 
 /**
@@ -84,6 +85,8 @@ export interface ScreenDeps {
   daily?: DailySession;
   /** Il record DAILY di oggi, in locale. Assente, nessun record. */
   dailyStore?: DailyStore;
+  /** La serie di giorni della sfida, sul dispositivo. Assente, niente serie. */
+  streak?: StreakStore;
   /** Le ultime iniziali, da cui riparte `nameEntry`. */
   initials?: InitialsMemory;
   /** La classifica mondiale (solo build con `WORLD_BOARD_BUILD`). Assente, solo la TOP 10 locale. */

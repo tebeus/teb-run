@@ -10,7 +10,9 @@ import { createNullAudio } from '../../../src/dev/null-audio';
 import { createScoresStore } from '../../../src/persist/scores';
 import { dailyChallenge } from '../../../src/shared/daily';
 import { createDailySession } from '../../../src/ui/dailySession';
-import { ATTRACT_PHASE_S, createTitleScreen, initialTitleState, PRESS_ENTER_Y, stepTitle, type TitleState } from '../../../src/ui/screens/title';
+import { ATTRACT_PHASE_S, createTitleScreen, initialTitleState, PRESS_ENTER_Y, stepTitle, STREAK_COLOR, STREAK_Y, type TitleState } from '../../../src/ui/screens/title';
+import { createStreakStore } from '../../../src/persist/streak';
+import { createRecordCtx } from '../../helpers/recordCtx';
 import { DAILY_RECT } from '../../../src/ui/titleLayout';
 import { buttonAt, touchLayout } from '../../../src/ui/touch';
 import { LOGICAL_W } from '../../../src/core/canvas';
@@ -79,6 +81,43 @@ describe('title: DAILY CHALLENGE', () => {
     expect(DAILY_RECT.x + DAILY_RECT.w).toBeLessThan(LOGICAL_W);
     // Sul telefono più piccolo (667 px CSS per 1280 logici) resta oltre 44 px CSS.
     expect(DAILY_RECT.h * (667 / LOGICAL_W)).toBeGreaterThanOrEqual(44);
+  });
+
+  test('the streak under the button, from 2 days up, above the links band; not in the map phase', () => {
+    const streak = createStreakStore();
+    const deps: ScreenDeps = {
+      assets: createEmptyAssets(),
+      audio: createNullAudio(),
+      scores: createScoresStore(),
+      raceFactory: (s, a) => createFakeRace(s, a),
+      attractFactory: (s, a) => createFakeRace(s, a),
+      renderWorld: () => {},
+      firstStage: { id: '0-0', name: 'Palm Bay', theme: 'beach', lengthSegments: 100, timeLimit: 80, seed: 1, difficulty: 0.15 },
+      daily: createDailySession(),
+      streak,
+      now: () => Date.parse('2026-10-27T12:00:00Z'),
+    };
+    const screen = createTitleScreen(deps);
+    screen.enter(undefined);
+    const orange = (): number[][] => {
+      const rec = createRecordCtx();
+      screen.render(rec.ctx);
+      return rec.fills().filter((op) => op.fill === STREAK_COLOR).map((op) => op.args);
+    };
+    expect(orange()).toHaveLength(0);
+    streak.record('2026-10-27');
+    expect(orange()).toHaveLength(0);
+    streak.record('2026-10-26');
+    streak.record('2026-10-27');
+    // 26 → 27: due giorni di fila.
+    const ops = orange();
+    expect(ops.length).toBeGreaterThan(0);
+    expect(Math.min(...ops.map((a) => a[1]))).toBeGreaterThan(DAILY_RECT.y + DAILY_RECT.h);
+    expect(Math.max(...ops.map((a) => a[1] + a[3]))).toBeLessThanOrEqual(630);
+    expect(STREAK_Y).toBe(DAILY_RECT.y + DAILY_RECT.h + 14);
+    // Nella fase mappa il pulsante non c'è, e nemmeno la serie.
+    screen.update(ATTRACT_PHASE_S * 2 + 1, act());
+    expect(orange()).toHaveLength(0);
   });
 
   test('entering the title closes the daily session', () => {

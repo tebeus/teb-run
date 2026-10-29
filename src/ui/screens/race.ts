@@ -9,6 +9,7 @@ import { go, type Screen, type ScreenPayloads, type Transition } from '../fsm';
 import { drawGoalLine, drawRaceHint, goalLineAlpha, raceHintAlpha } from '../controlsHelp';
 import { closedPause, drawPause, openPause, stepPause, wantsPause, type PauseState } from '../pause';
 import { drawTextOutlined } from '../text';
+import { drawGearHint, gearHintVisible, initialGearHint, stepGearHint } from '../gearHint';
 import { LOGICAL_H, LOGICAL_W } from '../../core/canvas';
 import { stagedOf } from '../../core/assets';
 import { successorIds } from '../../core/phases';
@@ -191,6 +192,9 @@ export function createRaceScreen(deps: ScreenDeps): Screen {
   // sessione, per i primi secondi, fermo con la pausa. null = spento.
   let hintT: number | null = null;
   let hintShown = false;
+  // L'aiuto marcia (spec prima tappa e ritorno §3.2): vive quanto la
+  // schermata, cioè la sessione; dopo il primo cambio non torna più.
+  let gearHint = initialGearHint();
   // La riga dell'obiettivo (solo build crazygames): come il suggerimento,
   // solo alla prima gara della sessione; si spegne anche al primo checkpoint.
   let goalT: number | null = null;
@@ -318,6 +322,7 @@ export function createRaceScreen(deps: ScreenDeps): Screen {
       const events = engine.update(dt, actions);
       if (GOAL_LINE_BUILD && events.some((ev) => ev.type === 'checkpoint')) goalT = null;
       snapshot = engine.snapshot();
+      gearHint = stepGearHint(gearHint, snapshot, dt);
       particles.update(dt, snapshot, deps.car?.get());
       trail.update(dt, snapshot);
       birds.update(dt, snapshot);
@@ -360,6 +365,7 @@ export function createRaceScreen(deps: ScreenDeps): Screen {
       if (pause.open) drawPause(ctx, pause, device);
       else if (hintT !== null) drawRaceHint(ctx, device, raceHintAlpha(hintT), deps.tiltOn?.() === true);
       if (GOAL_LINE_BUILD && goalT !== null && !pause.open && startLightPhase(snapshot.countdown) === 'none') drawGoalLine(ctx, goalLineAlpha(goalT));
+      if (!pause.open && gearHintVisible(gearHint, snapshot)) drawGearHint(ctx, device);
     },
     exit() {
       if (SDK_BUILD) GAMEPLAY.raceOver();

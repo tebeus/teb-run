@@ -11,6 +11,7 @@ import { dailyChallenge } from '../../src/shared/daily';
 import { durationBounds, maxScore, stagesOfRoute, validateRun, type RunBody } from '../../src/shared/validate';
 import { allRoutes, type RouteRun } from '../helpers/prudent-driver';
 import { driveRouteExpert, driveRouteExpertWithError } from '../helpers/expert-driver';
+import { BEGINNERS, driveBeginner } from '../helpers/beginner-driver';
 import type { Difficulty } from '../../src/types';
 
 const NOW = new Date('2026-10-25T12:00:00Z');
@@ -111,6 +112,33 @@ describe('rejected runs', () => {
     // Game over alla prima tappa dopo pochi secondi: nessun minimo, nessun checkpoint.
     expect(validateRun({ ...good, stageId: '0-0', route: '', ending: null, durationMs: 81_000, score: 9_000 }, NOW)).toMatchObject({ ok: true });
   });
+
+  test('the first stage of NORMAL is 110 s: a beginner who uses it all and dies at 1-1 passes', () => {
+    // Spec prima tappa e ritorno §3.3: 110 s alla 0-0, poi game over alla 1-1
+    // (70 s, nessun riporto) = 180 s di gara + 2 s di frenata. Il Worker del
+    // lancio ne accettava al massimo 80 + 70 + 4 = 154.
+    const beginner = { ...good, stageId: '1-1', route: 'R', ending: null, score: 12_000 };
+    expect(durationBounds(stagesOfRoute('R')!, 'normal', false).max).toBe(184);
+    expect(durationBounds(stagesOfRoute('R')!, 'hard', false).max).toBe(146);
+    expect(validateRun({ ...beginner, durationMs: 182_000 }, NOW)).toMatchObject({ ok: true });
+    expect(validateRun({ ...beginner, durationMs: 200_000 }, NOW)).toEqual({ ok: false, reason: 'duration' });
+    expect(validateRun({ ...beginner, mode: 'hard', durationMs: 182_000 }, NOW)).toEqual({ ok: false, reason: 'duration' });
+  });
+
+  test('real runs of the beginner driver pass, wherever they stop', () => {
+    for (const name of ['careful', 'late', 'precise'] as const) {
+      const run = driveBeginner(BEGINNERS[name], { seed: 1 });
+      const body: RunBody = {
+        ...good,
+        score: run.score,
+        stageId: run.stageId,
+        route: 'R'.repeat(run.checkpoints),
+        ending: null,
+        durationMs: Math.round(run.elapsed * 1000),
+      };
+      expect(validateRun(body, NOW), `${name} ${run.stageId} ${run.score} in ${run.elapsed.toFixed(1)} s`).toMatchObject({ ok: true });
+    }
+  }, SLOW);
 
   test('a pause is not race time: the longest legal run still passes', () => {
     // Il tempo di gara si ferma in pausa e durante la pubblicità (prova

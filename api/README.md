@@ -86,6 +86,28 @@ del progetto.
    - `node tools/smoke.mjs https://api.tebrun.io` manda due partite di prova `TST`, che poi si nascondono da `/admin`.
 5. **Gioco.** Fai il deploy della build `site` (`npm run build:site`, poi Cloudflare Pages). Il suo `_headers` ha già `https://api.tebrun.io` in `connect-src`. Le build `portal` e `crazygames` non cambiano comportamento: non chiamano l'API.
 
+## Ridistribuzione dopo la prima tappa a 110 s (binario M)
+
+La 0-0 di NORMAL è passata da 80 a 110 s: 30 s in più che valgono solo nella prima
+tappa e non si riportano (`CARRY_FIRST_STAGE_EXTRA` in `src/game/timer.ts`). La
+tabella `src/shared/limits.ts` è rigenerata (`limit.normal` 110, `grace.normal` 30
+per la 0-0), quindi **il Worker va ridistribuito prima del gioco**:
+
+```sh
+cd api
+npx wrangler deploy
+```
+
+Poi la build `site`. In quest'ordine nessuna partita vera viene rifiutata:
+
+- il Worker nuovo accetta anche le partite dei client vecchi, perché i suoi limiti sono più larghi;
+- il Worker vecchio rifiuterebbe come `duration` le partite lunghe del gioco nuovo, per esempio un game over alla
+  1-1 dopo 180 s (oggi il massimo è 154).
+
+Nessuna migrazione D1. Se un giorno si cambia `CARRY_FIRST_STAGE_EXTRA`, si rilancia
+`npm run gen:limits` e si ridistribuisce il Worker allo stesso modo: la durata
+massima non cambia, cambia solo il tetto del punteggio.
+
 ## Esempio di `/daily`
 
 ```json

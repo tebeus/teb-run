@@ -10,6 +10,7 @@ import { createEmptyAssets } from '../../src/dev/empty-assets';
 import { createFakeRace } from '../../src/dev/fake-race';
 import { createNullAudio } from '../../src/dev/null-audio';
 import { createDailyStore } from '../../src/persist/daily';
+import { createStreakStore } from '../../src/persist/streak';
 import { dailyChallenge } from '../../src/shared/daily';
 import { createDailySession } from '../../src/ui/dailySession';
 import { RETRY_INPUT_DELAY_S } from '../../src/ui/retryMenu';
@@ -96,6 +97,35 @@ describe('end of a DAILY game', () => {
     expect(screen.update(1 / 60, act({ confirm: true }))?.to).toBe('daily');
     const { enterEndOfGame } = await import('../../src/ui/endOfGame');
     expect(enterEndOfGame(r.deps, payload(1), false).nextLine).toBe('NEW CHALLENGE IN 23H 59M');
+  });
+});
+
+describe('the streak at the end of a DAILY game (spec prima tappa e ritorno §5)', () => {
+  test('from 2 days up, before NEW CHALLENGE IN; not outside DAILY', async () => {
+    const { enterEndOfGame, withStreak } = await import('../../src/ui/endOfGame');
+    expect(withStreak(1, 'NEW CHALLENGE IN 5H')).toBe('NEW CHALLENGE IN 5H');
+    expect(withStreak(3, 'NEW CHALLENGE IN 5H')).toBe('DAY 3 IN A ROW · NEW CHALLENGE IN 5H');
+    const r = setup({ daily: true });
+    const streak = createStreakStore();
+    r.deps.streak = streak;
+    streak.record('2026-10-24');
+    expect(enterEndOfGame(r.deps, payload(1), false).nextLine).toBe('NEW CHALLENGE IN 12H 0M');
+    const r2 = setup({ daily: true });
+    const longer = createStreakStore();
+    longer.record('2026-10-22');
+    longer.record('2026-10-23');
+    longer.record('2026-10-24');
+    r2.deps.streak = longer;
+    expect(enterEndOfGame(r2.deps, payload(1), false).nextLine).toBe('DAY 3 IN A ROW · NEW CHALLENGE IN 12H 0M');
+    const normal = setup({ daily: false });
+    normal.deps.streak = longer;
+    expect(enterEndOfGame(normal.deps, payload(1), false).nextLine).toBeNull();
+  });
+
+  test('the longest line fits the game over screen', async () => {
+    const { measureText } = await import('../../src/ui/text');
+    const { LOGICAL_W } = await import('../../src/core/canvas');
+    expect(measureText('DAY 999 IN A ROW · NEW CHALLENGE IN 23H 59M', 2)).toBeLessThan(LOGICAL_W - 64);
   });
 });
 

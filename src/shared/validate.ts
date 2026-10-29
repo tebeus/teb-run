@@ -121,11 +121,12 @@ export function maxScore(
   // I checkpoint sono alla fine di ogni tappa tranne l'ultima raggiunta.
   for (let k = 0; k < stages.length - 1; k++) {
     const s = stages[k].limits;
-    reserve += s.limit[mode] - s.length / LIMITS.maxSpeedSegmentsPerSecond;
-    checkpoints += LIMITS.checkpointBonusPerSecond * Math.max(0, reserve);
+    // La grazia (la 0-0 di NORMAL) non si riporta e non fa bonus, come nel gioco.
+    reserve = Math.max(0, reserve + s.limit[mode] - s.length / LIMITS.maxSpeedSegmentsPerSecond - s.grace[mode]);
+    checkpoints += LIMITS.checkpointBonusPerSecond * reserve;
   }
-  const limits = stages.reduce((t, s) => t + s.limits.limit[mode], 0);
-  const finish = finished ? LIMITS.finishBonusPerSecond * Math.max(0, limits - durationS + 1) : 0;
+  const carried = stages.reduce((t, s) => t + s.limits.limit[mode] - s.limits.grace[mode], 0);
+  const finish = finished ? LIMITS.finishBonusPerSecond * Math.max(0, carried - durationS + 1) : 0;
   return SCORE_FACTOR * (drive + overtakes + checkpoints + finish) + SCORE_SLACK;
 }
 

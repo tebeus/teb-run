@@ -267,3 +267,34 @@ test.describe('DAILY by touch', () => {
     expect(errors).toEqual([]);
   });
 });
+
+test.describe('streak of days', () => {
+  test('DAY 2 IN A ROW on the title after yesterday and the day before; DAY 3 at the end of today\'s DAILY game', async ({ page }) => {
+    const errors = pageErrors(page);
+    await fakeApi(page);
+    const today = dailyKey(new Date());
+    const yesterday = dailyKey(new Date(Date.now() - 24 * 3600 * 1000));
+    await page.addInitScript((last) => {
+      localStorage.setItem('tebrun.streak.v1', JSON.stringify({ last, count: 2 }));
+    }, yesterday);
+    await boot(page);
+    await page.waitForTimeout(600);
+    await page.screenshot({ path: `${OUT}/streak-title.png` });
+    await click(page, centre(DAILY_RECT));
+    await expect.poll(() => screenName(page)).toBe('daily');
+    await click(page, centre(DAILY_START_RECT));
+    await expect.poll(() => screenName(page)).toBe('radio');
+    await click(page, { x: 640, y: 560 });
+    await expect.poll(() => screenName(page)).toBe('race');
+    // Conta al via della gara, col giorno della sfida.
+    await expect
+      .poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('tebrun.streak.v1') ?? 'null')))
+      .toEqual({ last: today, count: 3 });
+    await page.keyboard.down('ArrowUp');
+    await expect.poll(() => screenName(page), { timeout: 20_000 }).toBe('gameOver');
+    await page.keyboard.up('ArrowUp');
+    await page.waitForTimeout(900);
+    await page.screenshot({ path: `${OUT}/streak-gameover.png` });
+    expect(errors).toEqual([]);
+  });
+});

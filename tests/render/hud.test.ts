@@ -5,6 +5,8 @@ import {
   HUD_MODE_Y,
   audioIndicatorText,
   bannerText,
+  forkAheadLines,
+  forkTakenText,
   BAR_MAX_H,
   BAR_MIN_H,
   BAR_W,
@@ -24,7 +26,9 @@ import {
   timeBlinkOn,
 } from '../../src/render/hud';
 import { LOGICAL_H, LOGICAL_W } from '../../src/core/canvas';
-import { GLYPHS } from '../../src/ui/text';
+import { GLYPHS, measureText } from '../../src/ui/text';
+import { GEAR_HINT_Y } from '../../src/ui/gearHint';
+import { REAL_GRAPH, STAGE_LIST } from '../../src/game/stages';
 import { createRecordCtx } from '../helpers/recordCtx';
 import { makeAsset } from '../helpers/segments';
 import type { AssetStore, RaceSnapshot } from '../../src/types';
@@ -424,5 +428,47 @@ describe('modalità nell HUD (collaudo utente: due livelli di difficoltà)', () 
   test('HARD is written in its own colour', () => {
     expect(HUD_MODE_COLORS.hard).not.toBe(HUD_MODE_COLORS.normal);
     expect(modeFills('hard')).toBeGreaterThan(0);
+  });
+});
+
+describe('the sign before the fork and the side taken (spec prima tappa e ritorno §4)', () => {
+  test('lines: CHOOSE YOUR ROAD, then both stages with arrows, always inside the screen', () => {
+    expect(forkAheadLines(['SANDSTONE GATE', 'BLUE LAGOON']).map((l) => l.text)).toEqual([
+      'CHOOSE YOUR ROAD',
+      '< SANDSTONE GATE   BLUE LAGOON >',
+    ]);
+    // Ogni coppia vera di tappe del grafo ci sta.
+    for (const stage of STAGE_LIST) {
+      const left = REAL_GRAPH.next(stage, 'L');
+      const right = REAL_GRAPH.next(stage, 'R');
+      if (left === null || right === null) continue;
+      for (const line of forkAheadLines([left.name, right.name])) {
+        expect(measureText(line.text, line.scale), line.text).toBeLessThanOrEqual(LOGICAL_W - 64);
+      }
+    }
+  });
+
+  test('side taken: LEFT: or RIGHT: with the name of that stage', () => {
+    expect(forkTakenText('L', ['SANDSTONE GATE', 'BLUE LAGOON'])).toBe('LEFT: SANDSTONE GATE');
+    expect(forkTakenText('R', ['Sandstone Gate', 'Blue Lagoon'])).toBe('RIGHT: BLUE LAGOON');
+    expect(() => forkTakenText('R', undefined)).not.toThrow();
+  });
+
+  test('the sign sits in the sky, under TIME and SCORE, above the gear hint; not drawn under the pause menu', () => {
+    for (const snap of [
+      baseSnapshot({ banner: 'forkAhead', forkNames: ['Sandstone Gate', 'Blue Lagoon'] }),
+      baseSnapshot({ banner: 'fork', forkNames: ['Sandstone Gate', 'Blue Lagoon'], forkTaken: 'L' }),
+    ]) {
+      const yellow = (paused: boolean): number[][] => {
+        const rec = createRecordCtx();
+        renderHud(rec.ctx, snap, fakeAssets(), { paused });
+        return rec.fills().filter((op) => op.fill === '#ffee55').map((op) => op.args);
+      };
+      const ops = yellow(false);
+      expect(ops.length).toBeGreaterThan(0);
+      expect(Math.min(...ops.map((a) => a[1]))).toBeGreaterThanOrEqual(FORK_BANNER_Y);
+      expect(Math.max(...ops.map((a) => a[1] + a[3]))).toBeLessThan(GEAR_HINT_Y - 8);
+      expect(yellow(true)).toHaveLength(0);
+    }
   });
 });

@@ -10,6 +10,7 @@ import { SDK_BUILD } from '../core/target';
 import { dailyKey, type DailyChallenge } from '../shared/daily';
 import type { ScreenDeps } from './deps';
 import { nextChallengeLine } from './dailySession';
+import { streakLine } from '../persist/streak';
 import { go, type Transition } from './fsm';
 import { bestLine, isNewBest, personalBest } from './retryMenu';
 import type { StageDef } from '../types';
@@ -21,13 +22,19 @@ export interface EndOfGame {
   qualifies: boolean;
   /** `NEW BEST!`, `BEST 9000`, `NEW DAILY BEST!`, `DAILY BEST 9000`. */
   bestText: string;
-  /** `NEW CHALLENGE IN 5H 12M`, solo in DAILY. */
+  /** `NEW CHALLENGE IN 5H 12M`, solo in DAILY; con la serie davanti da 2 giorni: `DAY 3 IN A ROW · NEW CHALLENGE IN 5H 12M`. */
   nextLine: string | null;
 }
 
 /** `NEW DAILY BEST!` o `DAILY BEST <punteggio>`; il primo punteggio di oggi è un record. Pura. */
 export function dailyBestLine(score: number, best: number | null): string {
   return best === null || isNewBest(score, best) ? 'NEW DAILY BEST!' : `DAILY BEST ${best}`;
+}
+
+/** La riga di fine partita DAILY con la serie davanti, se si mostra. Pura. */
+export function withStreak(count: number, next: string): string {
+  const line = streakLine(count);
+  return line === null ? next : `${line} · ${next}`;
 }
 
 /** Decide e registra, all'ingresso di game over o finale. `celebrated`: il finale fa già festa da sé. */
@@ -54,7 +61,7 @@ export function enterEndOfGame(
       daily,
       qualifies: deps.board?.wouldQualify(mode, 'daily', run.score) === true,
       bestText: dailyBestLine(run.score, prev?.score ?? null),
-      nextLine: nextChallengeLine(now),
+      nextLine: withStreak(deps.streak?.current(dailyKey(now)) ?? 0, nextChallengeLine(now)),
     };
   }
   const best = personalBest(deps.scores.load());

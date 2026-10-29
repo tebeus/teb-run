@@ -34,9 +34,11 @@ import { checkpointBonus, finishBonus, overtakeScore, tickScore } from './score'
 import { levelOf, type StageGraph } from './stage-graph';
 import { gripFor } from './surface';
 import {
+  carryAfterCheckpoint,
   carryOver,
   CHECKPOINT_BANNER_S,
   expiredSpeed,
+  graceOf,
   initialTimer,
   stepBannerClock,
   stepTimer,
@@ -235,17 +237,31 @@ export function forkSide(x: number): 'L' | 'R' {
 }
 
 /**
- * Banner corrente, in ordine di priorità: game over, checkpoint, bivio
- * (spec §8, §11). Pura.
+ * Segmenti prima della zona di bivio in cui si vede il cartello
+ * `CHOOSE YOUR ROAD` (spec prima tappa e ritorno §4): circa 5 s a tutta
+ * velocità. Il banner del bivio arriva solo all'ingresso della zona, e il
+ * commit 30 segmenti dopo (circa mezzo secondo): senza preavviso chi stava al
+ * centro o a destra finiva a destra senza aver letto niente.
+ */
+export const FORK_AHEAD_SEGMENTS = 300;
+/** Secondi di `LEFT: <tappa>` o `RIGHT: <tappa>` dopo il commit del bivio (§4). */
+export const FORK_TAKEN_S = 1.5;
+
+/**
+ * Banner corrente, in ordine di priorità: game over, checkpoint, bivio,
+ * cartello prima del bivio (spec §8, §11; spec prima tappa e ritorno §4).
+ * Pura.
  */
 export function currentBanner(state: {
   expired: boolean;
   checkpointLeft: number;
   inForkZone: boolean;
+  forkAhead?: boolean;
 }): Banner {
   if (state.expired) return 'gameover';
   if (state.checkpointLeft > 0) return 'checkpoint';
-  return state.inForkZone ? 'fork' : 'none';
+  if (state.inForkZone) return 'fork';
+  return state.forkAhead === true ? 'forkAhead' : 'none';
 }
 
 export interface FullRaceOptions {
@@ -296,6 +312,11 @@ export function createFullRace(opts: FullRaceOptions): RaceEngine {
   let extendTime = 0;
   let forkNames: [string, string] | undefined;
   let forkFired = false;
+  // Le due tappe per il cartello prima del bivio, calcolate una volta per
+  // tappa (`undefined` = non ancora, `null` = ultima tappa, niente bivio).
+  let aheadNames: [string, string] | null | undefined;
+  // Secondi che restano al `LEFT:`/`RIGHT:` dopo il commit (§4).
+  let forkTakenLeft = 0;
   // Lato deciso al commit del bivio (bivio v3), `null` finché non c'è.
   let forkCommit: -1 | 1 | null = null;
   let expiredFromSpeed = 0;
@@ -320,6 +341,15 @@ export function createFullRace(opts: FullRaceOptions): RaceEngine {
   const forkZoneZ = (): number => (segments.length - FORK_ZONE_SEGMENTS) * SEGMENT_LENGTH;
   const forkCommitZ = (): number => forkZoneZ() + FORK_COMMIT * SEGMENT_LENGTH;
   const hasForkZone = (): boolean => segments[segments.length - FORK_ZONE_SEGMENTS]?.fork === 'zone';
+  /**
+   * Negli ultimi `FORK_AHEAD_SEGMENTS` segmenti prima della zona di bivio,
+   * mai nella prima metà della strada prima della zona: in una tappa corta
+   * (quelle dei test) il cartello non deve partire già al via.
+   */
+  const inForkAhead = (): boolean =>
+    hasForkZone() &&
+    player.z < forkZoneZ() &&
+    player.z >= Math.max(forkZoneZ() - FORK_AHEAD_SEGMENTS * SEGMENT_LENGTH, forkZoneZ() / 2);
 
   /**
    * Commit del bivio (bivio v3, spec §4.4): il lato si fissa dal segno di
@@ -348,6 +378,7 @@ export function createFullRace(opts: FullRaceOptions): RaceEngine {
       }
     }
     forkCommit = side;
+    forkTakenLeft = FORK_TAKEN_S;
   };
 
   /** Le due tappe del bivio, o null se questa è l'ultima del percorso. */
@@ -400,6 +431,8 @@ export function createFullRace(opts: FullRaceOptions): RaceEngine {
     player = { ...player, z: overshoot, x: recenteredX };
     forkNames = undefined;
     forkFired = false;
+    aheadNames = undefined;
+    forkTakenLeft = 0;
     // issue #7 della revisione E: un incidente ancora attivo alla fine della
     // tappa proseguirebbe la rotazione sul rettilineo di partenza della
     // tappa successiva. La barriera di bordo tappa e la durata di un crash
@@ -501,10 +534,13 @@ export function createFullRace(opts: FullRaceOptions): RaceEngine {
           events.push({ type: 'finish', ending: graph.endingOf(stage), score: Math.round(score) });
           return events;
         }
-        const bonus = checkpointBonus(timer.left);
+        // La grazia della tappa (la 0-0 di NORMAL) non si riporta e non
+        // fa bonus: chi guida bene arriva alla 1-0 come al lancio.
+        const carried = carryAfterCheckpoint(timer.left, graceOf(stage));
+        const bonus = checkpointBonus(carried);
         score += bonus;
         extendTime = next.timeLimit;
-        timer = { left: carryOver(timer.left, next.timeLimit), expired: null };
+        timer = { left: carryOver(carried, next.timeLimit), expired: null };
         checkpointLeft = CHECKPOINT_BANNER_S;
         switchStage(next, side, overshoot);
         stageEnded = true;
@@ -567,6 +603,7 @@ export function createFullRace(opts: FullRaceOptions): RaceEngine {
         playerHeightAt(segments, player.z),
       );
       checkpointLeft = stepBannerClock(checkpointLeft, dt);
+      forkTakenLeft = stepBannerClock(forkTakenLeft, dt);
 
       // Deviazione dal piano, dichiarata qui (issue #3 della revisione E):
       // la spec §8 manda in game over non appena l'orologio scende sotto
@@ -585,11 +622,19 @@ export function createFullRace(opts: FullRaceOptions): RaceEngine {
       return events;
     },
     snapshot(): RaceSnapshot {
+      const ahead = !forkFired && inForkAhead();
+      if (ahead && aheadNames === undefined) {
+        const both = successors();
+        aheadNames = both === null ? null : [both.left.name, both.right.name];
+      }
       const banner = currentBanner({
         expired: timer.expired !== null,
         checkpointLeft,
         inForkZone: forkFired && player.z >= forkZoneZ(),
+        forkAhead: ahead && aheadNames !== null,
       });
+      const names = banner === 'fork' ? forkNames : banner === 'forkAhead' ? (aheadNames ?? undefined) : undefined;
+      const taken = banner === 'fork' && forkTakenLeft > 0 && forkCommit !== null ? (forkCommit < 0 ? 'L' : 'R') : undefined;
       return {
         segments: updateVisible(segments, player, LOGICAL_W, LOGICAL_H),
         player,
@@ -606,7 +651,8 @@ export function createFullRace(opts: FullRaceOptions): RaceEngine {
         theme: stage.theme,
         transition: transition ?? undefined,
         banner,
-        forkNames: banner === 'fork' ? forkNames : undefined,
+        forkNames: names,
+        ...(taken === undefined ? {} : { forkTaken: taken }),
         kmh: kmh(player.speed),
       };
     },

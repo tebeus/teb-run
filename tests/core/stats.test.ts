@@ -51,6 +51,8 @@ describe('the event table', () => {
       ...[...STAGES.keys()].flatMap((id) => [STAT_EVENTS.fork(id, 'L'), STAT_EVENTS.fork(id, 'R')]),
       STAT_EVENTS.dailyStart(),
       STAT_EVENTS.dailyEnd(),
+      ...[...STAGES.keys()].map((id) => STAT_EVENTS.gameOver(id)),
+      STAT_EVENTS.gearHi(),
     ];
     for (const n of names) {
       expect(n, n).toMatch(EVENT_NAME);
@@ -63,6 +65,8 @@ describe('the event table', () => {
     expect(STAT_EVENTS.share()).toBe('share');
     expect(STAT_EVENTS.mode('hard')).toBe('mode/hard');
     expect(STAT_EVENTS.car('sport')).toBe('car/sport');
+    expect(STAT_EVENTS.gameOver('0-0')).toBe('gameover/0-0');
+    expect(STAT_EVENTS.gearHi()).toBe('gear/hi');
   });
 
   test('anything that is not a table name is refused', () => {
@@ -78,6 +82,8 @@ describe('the event table', () => {
     expect(eventTitle('ending/3')).toBe('Ending 3');
     expect(eventTitle('share')).toBe('Result shared');
     expect(eventTitle('mode/normal')).toBe('Mode normal');
+    expect(eventTitle('gameover/2-1')).toBe('Game over at 2-1');
+    expect(eventTitle('gear/hi')).toBe('High gear');
     expect(eventTitle('car/new')).toBe('Car new');
   });
 
@@ -255,6 +261,62 @@ describe('trackRace', () => {
     const race = trackRace(fake([[{ type: 'finish', ending: 0, score: 1 }]]), s, '0-0');
     race.update(1 / 60, {} as never);
     expect(e.sent.map((u) => params(u).p)).not.toContain('daily/end');
+  });
+
+  test('game over counts the stage where the time ran out, once, never the score', () => {
+    const e = env();
+    const s = createStats(true, STATS_ENDPOINT, e);
+    s.startGame('normal', 'new');
+    const over: RaceEvent = { type: 'gameover', score: 2907, stage: stage('1-1') };
+    const race = trackRace(fake([[{ type: 'checkpoint', bonus: 0, nextStage: stage('1-1') }], [over], [over]]), s, '0-0');
+    for (let k = 0; k < 4; k++) race.update(1 / 60, {} as never);
+    const sent = e.sent.map((u) => params(u).p);
+    expect(sent.filter((p) => p.startsWith('gameover/'))).toEqual(['gameover/1-1']);
+    expect(e.sent.join(' ')).not.toContain('2907');
+  });
+
+  test('gear/hi the first time the player puts the high gear, once per game', () => {
+    const e = env();
+    const s = createStats(true, STATS_ENDPOINT, e);
+    s.startGame('normal', 'new');
+    // Marcia del motore finto: il cambio la gira, un incidente la riporta in `lo`.
+    let gear: 'lo' | 'hi' = 'lo';
+    const engine: RaceEngine = {
+      update: (_dt, a) => {
+        if (a.gearToggle) gear = gear === 'lo' ? 'hi' : 'lo';
+        return [];
+      },
+      snapshot: () => ({ player: { gear } }) as RaceSnapshot,
+    };
+    const race = trackRace(engine, s, '0-0');
+    const tick = (gearToggle: boolean): void => void race.update(1 / 60, { gearToggle } as never);
+    tick(false);
+    expect(e.sent.map((u) => params(u).p)).not.toContain('gear/hi');
+    tick(true); // lo → hi
+    tick(true); // hi → lo: non conta
+    gear = 'lo'; // come dopo un incidente
+    tick(true); // di nuovo hi: già contato
+    expect(e.sent.map((u) => params(u).p).filter((p) => p === 'gear/hi')).toHaveLength(1);
+  });
+
+  test('gear/hi is not sent when the toggle goes from high to low', () => {
+    const e = env();
+    const s = createStats(true, STATS_ENDPOINT, e);
+    s.startGame('normal', 'new');
+    let gear: 'lo' | 'hi' = 'hi';
+    const race = trackRace(
+      {
+        update: (_dt, a) => {
+          if (a.gearToggle) gear = gear === 'lo' ? 'hi' : 'lo';
+          return [];
+        },
+        snapshot: () => ({ player: { gear } }) as RaceSnapshot,
+      },
+      s,
+      '0-0',
+    );
+    race.update(1 / 60, { gearToggle: true } as never);
+    expect(e.sent.map((u) => params(u).p)).not.toContain('gear/hi');
   });
 
   test('with stats off the engine is returned untouched', () => {

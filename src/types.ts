@@ -230,6 +230,12 @@ export interface StageDef {
   lengthSegments: number;
   /** Secondi. */
   timeLimit: number;
+  /**
+   * Secondi di `timeLimit` che valgono solo in questa tappa e non si
+   * riportano (`STAGE_CARRY_GRACE` in `game/timer.ts`): la 0-0 di NORMAL.
+   * Assente vale zero.
+   */
+  carryGrace?: number;
   seed: number;
   /** 0..1. */
   difficulty: number;
@@ -264,7 +270,12 @@ export interface StageDef {
   trafficSalt?: number;
 }
 
-export type Banner = 'none' | 'checkpoint' | 'gameover' | 'fork';
+/**
+ * `forkAhead` è il cartello prima del bivio (spec prima tappa e ritorno §4):
+ * `CHOOSE YOUR ROAD` e le due tappe, negli ultimi `FORK_AHEAD_SEGMENTS`
+ * segmenti prima della zona.
+ */
+export type Banner = 'none' | 'checkpoint' | 'gameover' | 'fork' | 'forkAhead';
 
 /**
  * Transizione fra due tappe di tema diverso (spec §4.4d): il renderer sa da
@@ -338,7 +349,13 @@ export interface RaceSnapshot {
    */
   transition?: StageTransition;
   banner: Banner;
+  /** Le due tappe del bivio, con il banner `fork` o `forkAhead`. */
   forkNames?: [string, string];
+  /**
+   * Il lato appena preso al bivio, per `FORK_TAKEN_S` dopo il commit e solo
+   * con il banner `fork`: l'HUD scrive `LEFT: <tappa>` o `RIGHT: <tappa>`.
+   */
+  forkTaken?: 'L' | 'R';
   kmh: number;
 }
 

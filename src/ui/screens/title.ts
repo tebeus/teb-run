@@ -4,6 +4,7 @@ import { emptyActions } from '../../core/input';
 import { modeLabel } from '../../game/mode';
 import { FIRST_STAGE_ID } from '../../game/stages';
 import type { ScoreEntry } from '../../persist/scores';
+import { streakLine } from '../../persist/streak';
 import { drawRouteMapPanel, visitedStages } from '../../render/routeMap';
 import type { Actions, RaceEngine, RaceSnapshot } from '../../types';
 import type { ScreenDeps } from '../deps';
@@ -294,7 +295,13 @@ export function createTitleScreen(deps: ScreenDeps): Screen {
         // Con DAILY scelto da tastiera o gamepad la partenza normale si spegne un po'.
         drawTextOutlined(ctx, line, LOGICAL_W / 2, y, 3, state.choice === 'daily' ? '#888888' : '#ffffff', 'center');
       }
-      if (deps.daily !== undefined && dailyShown(phase)) drawDailyButton(ctx, DAILY_RECT, state.choice === 'daily', deps.now);
+      if (deps.daily !== undefined && dailyShown(phase)) {
+        drawDailyButton(ctx, DAILY_RECT, state.choice === 'daily', deps.now);
+        // La serie di giorni, da 2 in su (spec prima tappa e ritorno §5).
+        const today = dailyKey(new Date(deps.now?.() ?? Date.now()));
+        const streak = streakLine(deps.streak?.current(today) ?? 0);
+        if (streak !== null) drawTextOutlined(ctx, streak, LOGICAL_W / 2, STREAK_Y, 2, STREAK_COLOR, 'center');
+      }
     },
     exit() {
       // Il motore dell'autopilota va buttato: tiene un array di segmenti per
@@ -305,6 +312,10 @@ export function createTitleScreen(deps: ScreenDeps): Screen {
     },
   };
 }
+
+/** La riga della serie, sotto il pulsante DAILY e sopra la fascia dei link (da y 630). */
+export const STREAK_Y = DAILY_RECT.y + DAILY_RECT.h + 14;
+export const STREAK_COLOR = '#ffaa33';
 
 /**
  * DAILY CHALLENGE, con la sfida di oggi in piccolo (`RETRO · HARD`): acceso

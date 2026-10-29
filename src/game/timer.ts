@@ -169,7 +169,9 @@ export const LEVEL_TIME_LIMITS: readonly number[] = [74, 71, 80, 85, 93];
 export const STAGE_TIME_LIMITS: Readonly<Record<string, number>> = {
   // Richiesta dell'utente: +6 s alla prima tappa (era 74), riportati come
   // tutti i secondi che avanzano. Le altre hanno +3 s (collaudo su iPhone).
-  '0-0': 80,
+  // Poi la prima tappa per i principianti (spec prima tappa e ritorno §3.2):
+  // 80 + `FIRST_STAGE_EXTRA_S`, i 30 s in più non si riportano.
+  '0-0': 110,
   '1-0': 73,
   '1-1': 70,
   '2-0': 85,
@@ -233,6 +235,43 @@ export function timeLimitFor(level: number, difficulty: number): number {
   const i = level < 0 ? 0 : level > LEVEL_TIME_LIMITS.length - 1 ? LEVEL_TIME_LIMITS.length - 1 : level;
   const base = LEVEL_TIME_LIMITS[i];
   return difficulty > HARD_DIFFICULTY ? base * HARD_TIME_FACTOR : base;
+}
+
+/**
+ * Secondi in più della 0-0 di NORMAL (spec prima tappa e ritorno §3): un
+ * principiante che non sa del cambio non la superava in 80 s, e nemmeno il
+ * pilota prudente (100 s). Sono già dentro `STAGE_TIME_LIMITS['0-0']`.
+ */
+export const FIRST_STAGE_EXTRA_S = 30;
+
+/**
+ * L'unico interruttore del riporto di quei secondi (risposta di Teb: si
+ * decide coi numeri, e si cambia solo questa costante). Falso: al
+ * checkpoint della 0-0 il riporto e il bonus partono dal tempo rimasto
+ * meno `FIRST_STAGE_EXTRA_S`, e dalla 1-0 in poi la partita di chi guida
+ * bene è identica a quella del lancio. Vero: si riportano come gli altri.
+ */
+export const CARRY_FIRST_STAGE_EXTRA = false;
+
+/**
+ * Secondi di grazia di ogni tappa di NORMAL: tempo che vale solo dentro la
+ * tappa e non si riporta. Vuota se `CARRY_FIRST_STAGE_EXTRA` è vero.
+ */
+export const STAGE_CARRY_GRACE: Readonly<Record<string, number>> = CARRY_FIRST_STAGE_EXTRA
+  ? {}
+  : { '0-0': FIRST_STAGE_EXTRA_S };
+
+/** La grazia di una tappa: `carryGrace`, o zero. Pura. */
+export function graceOf(stage: { carryGrace?: number }): number {
+  return stage.carryGrace ?? 0;
+}
+
+/**
+ * Il tempo che passa alla tappa dopo, e su cui si calcola il bonus del
+ * checkpoint: quello rimasto meno la grazia della tappa, mai negativo. Pura.
+ */
+export function carryAfterCheckpoint(left: number, grace: number): number {
+  return Math.max(0, left - grace);
 }
 
 /** Tempo della tappa successiva: il suo limite più quello avanzato (spec §8). Pura. */

@@ -1,7 +1,13 @@
 import { describe, expect, test } from 'vitest';
 import { modeGraph } from '../../src/game/mode';
 import { REAL_GRAPH } from '../../src/game/stages';
-import { LEVEL_TIME_LIMITS, STAGE_TIME_LIMITS, STAGE_TIME_LIMITS_HARD } from '../../src/game/timer';
+import {
+  carryAfterCheckpoint,
+  LEVEL_TIME_LIMITS,
+  STAGE_CARRY_GRACE,
+  STAGE_TIME_LIMITS,
+  STAGE_TIME_LIMITS_HARD,
+} from '../../src/game/timer';
 import { allRoutes, driveRoute, DRIVER_DT, type RouteRun } from '../helpers/prudent-driver';
 import { driveRouteExpert } from '../helpers/expert-driver';
 import { driveRouteSkilled } from '../helpers/skilled-driver';
@@ -77,12 +83,20 @@ const expertHardRun = memo((route) => driveRouteExpert(route, { graph: HARD_GRAP
 const skilledRun = memo((route) => driveRouteSkilled(route));
 const prudentRun = memo((route) => driveRoute(route));
 
-/** Margine peggiore per livello sui 16 percorsi. */
-function worstByLevel(runOf: (route: readonly ('L' | 'R')[]) => RouteRun): number[] {
+/**
+ * Margine peggiore per livello sui 16 percorsi, letto sul tempo **riportato**:
+ * la grazia della 0-0 di NORMAL (110 s, 30 dei quali non si riportano, spec
+ * prima tappa e ritorno §3.2) è per i principianti e non entra nella rete
+ * contro il «troppo facile». Con `CARRY_FIRST_STAGE_EXTRA` falso il livello 0
+ * misura come al lancio (9,5 s).
+ */
+function worstByLevel(runOf: (route: readonly ('L' | 'R')[]) => RouteRun, mode: 'NORMAL' | 'HARD'): number[] {
   const worst = LEVEL_TIME_LIMITS.map(() => Number.POSITIVE_INFINITY);
   for (const route of allRoutes()) {
     for (const m of runOf(route).margins) {
-      if (m.margin < worst[m.level]) worst[m.level] = m.margin;
+      const grace = mode === 'NORMAL' ? (STAGE_CARRY_GRACE[m.id] ?? 0) : 0;
+      const carried = carryAfterCheckpoint(m.margin, grace);
+      if (carried < worst[m.level]) worst[m.level] = carried;
     }
   }
   return worst;
@@ -125,7 +139,7 @@ describe.each([
   test(
     'the worst margin of every level, level 0 included, is between MIN_MARGIN and the mode ceiling',
     () => {
-      const worst = worstByLevel(runOf);
+      const worst = worstByLevel(runOf, mode);
       // Riga di taratura: è quella che si legge per ritoccare i limiti.
       console.info(
         `taratura (esperto, ${mode}): margine peggiore per livello = ${worst.map((v) => v.toFixed(1)).join(', ')} s ` +

@@ -148,6 +148,30 @@ export function bannerText(banner: Banner, forkNames?: [string, string]): string
   }
 }
 
+/** Riga del cartello prima del bivio (spec prima tappa e ritorno §4). */
+export const FORK_AHEAD_TITLE = 'CHOOSE YOUR ROAD';
+
+/**
+ * Le righe del cartello prima del bivio: `CHOOSE YOUR ROAD` a scala 4 e i
+ * nomi delle due tappe con le frecce a scala 3, o 2 se a 3 non ci stanno
+ * (la larghezza logica meno 32 px per lato). Pura.
+ */
+export function forkAheadLines(forkNames?: [string, string]): { text: string; scale: number }[] {
+  const [left, right] = forkNames ?? ['???', '???'];
+  const names = `< ${left.toUpperCase()}   ${right.toUpperCase()} >`;
+  const scale = measureText(names, 3) <= LOGICAL_W - 64 ? 3 : 2;
+  return [
+    { text: FORK_AHEAD_TITLE, scale: FORK_TEXT_SCALE },
+    { text: names, scale },
+  ];
+}
+
+/** La riga dopo il commit: `LEFT: <tappa>` o `RIGHT: <tappa>`. Pura. */
+export function forkTakenText(side: 'L' | 'R', forkNames?: [string, string]): string {
+  const [left, right] = forkNames ?? ['???', '???'];
+  return side === 'L' ? `LEFT: ${left.toUpperCase()}` : `RIGHT: ${right.toUpperCase()}`;
+}
+
 // Semaforo di partenza (spec §4.4e).
 /** Larghezza a schermo della scatola del semaforo. */
 export const START_LIGHTS_W = 420;
@@ -436,6 +460,16 @@ export function renderHud(
     // Niente banner al centro sotto il menu di pausa.
   } else if (banner === 'checkpoint') {
     drawCheckpointBanner(ctx, assets, snapshot.extendTime);
+  } else if (banner === 'fork' && snapshot.forkTaken !== undefined) {
+    // Il lato appena preso, per un attimo (spec prima tappa e ritorno §4).
+    const text = forkTakenText(snapshot.forkTaken, forkNames);
+    drawTextOutlined(ctx, text, LOGICAL_W / 2, FORK_BANNER_Y, FORK_TEXT_SCALE, '#ffee55', 'center', HUD_COLORS.outline);
+  } else if (banner === 'forkAhead') {
+    let y = FORK_BANNER_Y;
+    for (const line of forkAheadLines(forkNames)) {
+      drawTextOutlined(ctx, line.text, LOGICAL_W / 2, y, line.scale, '#ffee55', 'center', HUD_COLORS.outline);
+      y += 8 * line.scale + 10;
+    }
   } else {
     if (banner === 'fork') drawForkArrows(ctx, assets, forkNames);
     const top = banner === 'fork' ? FORK_BANNER_Y : LOGICAL_H / 2 - 30;

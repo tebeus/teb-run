@@ -32,6 +32,10 @@ export const STAT_EVENTS = {
   dailyStart: (): string => 'daily/start',
   /** Una partita della sfida giornaliera finisce (game over o arrivo). Nessun punteggio. */
   dailyEnd: (): string => 'daily/end',
+  /** Game over: la tappa dove è scaduto il tempo. Nessun punteggio, nessun tempo. */
+  gameOver: (stageId: string): string => `gameover/${stageId}`,
+  /** La prima volta in una partita che il giocatore mette la marcia alta. */
+  gearHi: (): string => 'gear/hi',
 } as const;
 
 /** Forma di ogni nome ammesso: minuscole, cifre, `-` e al più una `/`; L e R solo per i bivi. */
@@ -130,6 +134,10 @@ export function eventTitle(name: string): string {
       return `Mode ${arg}`;
     case 'car':
       return `Car ${arg}`;
+    case 'gameover':
+      return `Game over at ${arg}`;
+    case 'gear':
+      return 'High gear';
     default:
       return name;
   }
@@ -209,16 +217,24 @@ export function browserStatsEnv(win: Window): StatsEnv {
 
 /**
  * Il motore di una partita con gli eventi contati: tappa raggiunta e bivio
- * preso a ogni checkpoint, finale all'arrivo. Il motore e i suoi eventi
- * passano intatti; nessun lavoro in più per fotogramma oltre a scorrere gli
- * eventi che il motore ritorna già.
+ * preso a ogni checkpoint, finale all'arrivo, tappa del game over, prima
+ * marcia alta. Il motore e i suoi eventi passano intatti; nessun lavoro in
+ * più per fotogramma oltre a scorrere gli eventi che il motore ritorna già,
+ * tranne nei tick col cambio, finché `gear/hi` non è partito: lì due
+ * snapshot dicono se la marcia è passata da `lo` a `hi`.
  */
 export function trackRace(race: RaceEngine, stats: Stats, startStageId: string, daily = false): RaceEngine {
   if (!stats.active) return race;
   let current = startStageId;
+  let gearHiSent = false;
   return {
     update(dt, actions) {
+      const before = actions.gearToggle && !gearHiSent ? race.snapshot().player.gear : null;
       const events = race.update(dt, actions);
+      if (before === 'lo' && race.snapshot().player.gear === 'hi') {
+        gearHiSent = true;
+        stats.event(STAT_EVENTS.gearHi());
+      }
       for (const e of events) {
         if (e.type === 'checkpoint') {
           const side = indexOf(e.nextStage.id) === indexOf(current) ? 'L' : 'R';
@@ -227,6 +243,8 @@ export function trackRace(race: RaceEngine, stats: Stats, startStageId: string, 
           current = e.nextStage.id;
         } else if (e.type === 'finish') {
           stats.event(STAT_EVENTS.ending(e.ending + 1));
+        } else if (e.type === 'gameover') {
+          stats.event(STAT_EVENTS.gameOver(e.stage.id));
         }
         if (daily && (e.type === 'finish' || e.type === 'gameover')) stats.event(STAT_EVENTS.dailyEnd());
       }

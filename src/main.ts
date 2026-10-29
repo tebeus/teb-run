@@ -22,6 +22,7 @@ import { createDefaultCarSetting } from './persist/car';
 import { createDefaultModeSetting } from './persist/mode';
 import { createDefaultScoresStore } from './persist/scores';
 import { createDailyStore, createInitialsMemory, defaultStorage } from './persist/daily';
+import { createStreakStore } from './persist/streak';
 import { dailyGraph } from './game/daily';
 import { createDailySession, sessionCar, sessionMode } from './ui/dailySession';
 import { createDefaultTiltSeenSetting, createDefaultTiltSetting } from './persist/tilt';
@@ -138,6 +139,7 @@ async function main(): Promise<void> {
   const scores = createDefaultScoresStore(() => mode.get());
   const storage = defaultStorage();
   const dailyStore = createDailyStore(storage);
+  const streak = createStreakStore(storage);
   const initials = createInitialsMemory(storage);
   // La classifica mondiale (spec classifica e sfida, §2.7): nella build site
   // verso api.tebrun.io; nella privata solo con `?board=local`, verso
@@ -215,6 +217,7 @@ async function main(): Promise<void> {
     tiltAsking: () => tilt.asking === true,
     daily,
     dailyStore,
+    streak,
     initials,
     ...(board === undefined ? {} : { board }),
     ...(SDK_BUILD ? { inputLocked: () => GAMEPLAY.adRunning() } : {}),
@@ -235,7 +238,11 @@ async function main(): Promise<void> {
       });
       if (debugOn()) lastRace = race;
       stats.startGame(chosen, car.get());
-      if (challenge !== null) stats.event(STAT_EVENTS.dailyStart());
+      if (challenge !== null) {
+        stats.event(STAT_EVENTS.dailyStart());
+        // La serie conta al via della gara, col giorno della sfida giocata.
+        streak.record(challenge.key);
+      }
       return trackRace(race, stats, startStage.id, challenge !== null);
     },
     // La strada del titolo gira su `createRace`: nessun traffico, nessun

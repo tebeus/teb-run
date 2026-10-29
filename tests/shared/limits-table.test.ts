@@ -16,7 +16,7 @@ import {
 } from '../../src/game/score';
 import { ENDING_COUNT } from '../../src/game/stage-graph';
 import { indexOf, LAST_LEVEL, levelOf, REAL_GRAPH, STAGE_LIST, STAGES } from '../../src/game/stages';
-import { GAMEOVER_DECEL_S } from '../../src/game/timer';
+import { GAMEOVER_DECEL_S, graceOf } from '../../src/game/timer';
 import { trafficCountFor } from '../../src/game/traffic';
 import { SEGMENT_LENGTH } from '../../src/render/project';
 import { LIMITS, nextStageId, endingOfStage } from '../../src/shared/limits';
@@ -44,6 +44,8 @@ function fromGame() {
             index: indexOf(s.id),
             length: s.lengthSegments,
             limit: { normal: s.timeLimit, hard: hard.timeLimit },
+            // Secondi del limite che non si riportano (la 0-0 di NORMAL).
+            grace: { normal: graceOf(s), hard: graceOf(hard) },
             cars: { normal: trafficCountFor(s), hard: trafficCountFor(hard) },
           },
         ];

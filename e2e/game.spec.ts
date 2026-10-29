@@ -385,7 +385,7 @@ test.describe('TEB RUN', () => {
       });
     for (const [query, want, limit] of [
       ['?mode=hard', 'hard', 75],
-      ['', 'normal', 80],
+      ['', 'normal', 110],
     ] as const) {
       await page.goto(`/${query}#debug`);
       await page.waitForFunction(() => window.__tebrun !== undefined);

@@ -3,7 +3,8 @@ import { KMH_AT_MAX } from '../../src/game/player';
 import { REAL_GRAPH, levelOf } from '../../src/game/stages';
 import type { StageGraph } from '../../src/game/stage-graph';
 import { laneCentres, laneOf } from '../../src/game/traffic';
-import { LANES } from '../../src/render/project';
+import { buildTrack } from '../../src/game/track';
+import { LANES, SEGMENT_LENGTH } from '../../src/render/project';
 import type { Actions, AssetStore, RaceSnapshot, SpriteAsset } from '../../src/types';
 import { acts } from './race-script';
 
@@ -152,6 +153,8 @@ export interface RouteRun {
   elapsed: number;
   /** Ultima tappa raggiunta e scelte fatte ai bivi. */
   stageId: string;
+  /** Frazione dell'ultima tappa percorsa a fine corsa, 0..1. */
+  progress: number;
   route: ('L' | 'R')[];
   /** Finale 0..4, solo se la corsa è finita all'arrivo. */
   ending?: number;
@@ -248,6 +251,7 @@ export function driveRouteWith(
     score,
     elapsed: last.elapsed ?? 0,
     stageId: last.stage.id,
+    progress: Math.min(1, last.player.z / (buildTrack(last.stage).length * SEGMENT_LENGTH)),
     route: taken,
     ending,
   };
