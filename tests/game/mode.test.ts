@@ -64,8 +64,8 @@ describe('modalità di gioco (collaudo utente: due livelli di difficoltà)', () 
       expect(hard.timeLimit, stage.id).toBe(STAGE_TIME_LIMITS_HARD[stage.id]);
       expect(Number.isInteger(hard.timeLimit)).toBe(true);
       // La grazia della 0-0 è solo di NORMAL (spec prima tappa e ritorno §3.2).
-      expect(hard.carryGrace, stage.id).toBeUndefined();
-      expect({ ...hard, mode: undefined, timeLimit: stage.timeLimit }).toEqual({ ...stage, mode: undefined, carryGrace: undefined });
+      expect(hard.extraTime, stage.id).toBeUndefined();
+      expect({ ...hard, mode: undefined, timeLimit: stage.timeLimit }).toEqual({ ...stage, mode: undefined, extraTime: undefined });
     }
   });
 

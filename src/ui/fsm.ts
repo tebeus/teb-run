@@ -1,6 +1,6 @@
 import type { Actions, StageDef } from '../types';
 
-export type ScreenName = 'title' | 'daily' | 'radio' | 'race' | 'ending' | 'gameOver' | 'nameEntry' | 'scores';
+export type ScreenName = 'title' | 'daily' | 'radio' | 'race' | 'ending' | 'gameOver' | 'nameEntry' | 'scores' | 'endings';
 
 export interface Transition {
   to: ScreenName;
@@ -41,6 +41,8 @@ export interface ScreenPayloads {
    * brano. `page`: la pagina da cui partire (LOCAL, o la classifica mondiale
    * dove la partita è appena stata mandata).
    */
+  /** La collezione dei finali: la legge la schermata stessa dallo store. */
+  endings: undefined;
   scores: { highlight?: number; retry?: { song: number }; page?: 'local' | 'today' | 'alltime' | 'daily' } | undefined;
 }
 

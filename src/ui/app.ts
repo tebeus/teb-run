@@ -9,6 +9,7 @@ import { createRadioScreen } from './screens/radio';
 import { createScoresScreen } from './screens/scores';
 import { createTitleScreen } from './screens/title';
 import { createDailyScreen } from './screens/daily';
+import { createEndingsScreen } from './screens/endings';
 import { createWipe } from './transition';
 
 /**
@@ -31,6 +32,7 @@ export function createApp(deps: ScreenDeps): Fsm {
     gameOver: createGameOverScreen(deps),
     nameEntry: createNameEntryScreen(deps),
     scores: createScoresScreen(deps),
+    endings: createEndingsScreen(deps),
   };
   const fsm = createFsm(screens, 'title');
   // Tendina fra schermate (spec §11). Vive qui e non in `ui/fsm.ts`, che è

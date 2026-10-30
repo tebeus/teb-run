@@ -22,9 +22,15 @@ export const LIMITS = {
         "normal": 110,
         "hard": 75
       },
-      "grace": {
-        "normal": 30,
-        "hard": 0
+      "extra": {
+        "normal": {
+          "seconds": 30,
+          "carried": 15
+        },
+        "hard": {
+          "seconds": 0,
+          "carried": 0
+        }
       },
       "cars": {
         "normal": 42,
@@ -39,9 +45,15 @@ export const LIMITS = {
         "normal": 73,
         "hard": 70
       },
-      "grace": {
-        "normal": 0,
-        "hard": 0
+      "extra": {
+        "normal": {
+          "seconds": 0,
+          "carried": 0
+        },
+        "hard": {
+          "seconds": 0,
+          "carried": 0
+        }
       },
       "cars": {
         "normal": 55,
@@ -56,9 +68,15 @@ export const LIMITS = {
         "normal": 70,
         "hard": 67
       },
-      "grace": {
-        "normal": 0,
-        "hard": 0
+      "extra": {
+        "normal": {
+          "seconds": 0,
+          "carried": 0
+        },
+        "hard": {
+          "seconds": 0,
+          "carried": 0
+        }
       },
       "cars": {
         "normal": 55,
@@ -73,9 +91,15 @@ export const LIMITS = {
         "normal": 85,
         "hard": 80
       },
-      "grace": {
-        "normal": 0,
-        "hard": 0
+      "extra": {
+        "normal": {
+          "seconds": 0,
+          "carried": 0
+        },
+        "hard": {
+          "seconds": 0,
+          "carried": 0
+        }
       },
       "cars": {
         "normal": 68,
@@ -90,9 +114,15 @@ export const LIMITS = {
         "normal": 79,
         "hard": 76
       },
-      "grace": {
-        "normal": 0,
-        "hard": 0
+      "extra": {
+        "normal": {
+          "seconds": 0,
+          "carried": 0
+        },
+        "hard": {
+          "seconds": 0,
+          "carried": 0
+        }
       },
       "cars": {
         "normal": 68,
@@ -107,9 +137,15 @@ export const LIMITS = {
         "normal": 77,
         "hard": 74
       },
-      "grace": {
-        "normal": 0,
-        "hard": 0
+      "extra": {
+        "normal": {
+          "seconds": 0,
+          "carried": 0
+        },
+        "hard": {
+          "seconds": 0,
+          "carried": 0
+        }
       },
       "cars": {
         "normal": 68,
@@ -124,9 +160,15 @@ export const LIMITS = {
         "normal": 86,
         "hard": 87
       },
-      "grace": {
-        "normal": 0,
-        "hard": 0
+      "extra": {
+        "normal": {
+          "seconds": 0,
+          "carried": 0
+        },
+        "hard": {
+          "seconds": 0,
+          "carried": 0
+        }
       },
       "cars": {
         "normal": 81,
@@ -141,9 +183,15 @@ export const LIMITS = {
         "normal": 89,
         "hard": 87
       },
-      "grace": {
-        "normal": 0,
-        "hard": 0
+      "extra": {
+        "normal": {
+          "seconds": 0,
+          "carried": 0
+        },
+        "hard": {
+          "seconds": 0,
+          "carried": 0
+        }
       },
       "cars": {
         "normal": 82,
@@ -158,9 +206,15 @@ export const LIMITS = {
         "normal": 85,
         "hard": 82
       },
-      "grace": {
-        "normal": 0,
-        "hard": 0
+      "extra": {
+        "normal": {
+          "seconds": 0,
+          "carried": 0
+        },
+        "hard": {
+          "seconds": 0,
+          "carried": 0
+        }
       },
       "cars": {
         "normal": 81,
@@ -175,9 +229,15 @@ export const LIMITS = {
         "normal": 88,
         "hard": 84
       },
-      "grace": {
-        "normal": 0,
-        "hard": 0
+      "extra": {
+        "normal": {
+          "seconds": 0,
+          "carried": 0
+        },
+        "hard": {
+          "seconds": 0,
+          "carried": 0
+        }
       },
       "cars": {
         "normal": 85,
@@ -192,9 +252,15 @@ export const LIMITS = {
         "normal": 90,
         "hard": 89
       },
-      "grace": {
-        "normal": 0,
-        "hard": 0
+      "extra": {
+        "normal": {
+          "seconds": 0,
+          "carried": 0
+        },
+        "hard": {
+          "seconds": 0,
+          "carried": 0
+        }
       },
       "cars": {
         "normal": 94,
@@ -209,9 +275,15 @@ export const LIMITS = {
         "normal": 89,
         "hard": 88
       },
-      "grace": {
-        "normal": 0,
-        "hard": 0
+      "extra": {
+        "normal": {
+          "seconds": 0,
+          "carried": 0
+        },
+        "hard": {
+          "seconds": 0,
+          "carried": 0
+        }
       },
       "cars": {
         "normal": 98,
@@ -226,9 +298,15 @@ export const LIMITS = {
         "normal": 90,
         "hard": 91
       },
-      "grace": {
-        "normal": 0,
-        "hard": 0
+      "extra": {
+        "normal": {
+          "seconds": 0,
+          "carried": 0
+        },
+        "hard": {
+          "seconds": 0,
+          "carried": 0
+        }
       },
       "cars": {
         "normal": 94,
@@ -243,9 +321,15 @@ export const LIMITS = {
         "normal": 93,
         "hard": 87
       },
-      "grace": {
-        "normal": 0,
-        "hard": 0
+      "extra": {
+        "normal": {
+          "seconds": 0,
+          "carried": 0
+        },
+        "hard": {
+          "seconds": 0,
+          "carried": 0
+        }
       },
       "cars": {
         "normal": 102,
@@ -260,9 +344,15 @@ export const LIMITS = {
         "normal": 80,
         "hard": 75
       },
-      "grace": {
-        "normal": 0,
-        "hard": 0
+      "extra": {
+        "normal": {
+          "seconds": 0,
+          "carried": 0
+        },
+        "hard": {
+          "seconds": 0,
+          "carried": 0
+        }
       },
       "cars": {
         "normal": 89,

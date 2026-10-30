@@ -170,7 +170,7 @@ export const STAGE_TIME_LIMITS: Readonly<Record<string, number>> = {
   // Richiesta dell'utente: +6 s alla prima tappa (era 74), riportati come
   // tutti i secondi che avanzano. Le altre hanno +3 s (collaudo su iPhone).
   // Poi la prima tappa per i principianti (spec prima tappa e ritorno §3.2):
-  // 80 + `FIRST_STAGE_EXTRA_S`, i 30 s in più non si riportano.
+  // 80 + `FIRST_STAGE_EXTRA_S`; se ne riportano `FIRST_STAGE_EXTRA_CARRY_S`.
   '0-0': 110,
   '1-0': 73,
   '1-1': 70,
@@ -245,33 +245,44 @@ export function timeLimitFor(level: number, difficulty: number): number {
 export const FIRST_STAGE_EXTRA_S = 30;
 
 /**
- * L'unico interruttore del riporto di quei secondi (risposta di Teb: si
- * decide coi numeri, e si cambia solo questa costante). Falso: al
- * checkpoint della 0-0 il riporto e il bonus partono dal tempo rimasto
- * meno `FIRST_STAGE_EXTRA_S`, e dalla 1-0 in poi la partita di chi guida
- * bene è identica a quella del lancio. Vero: si riportano come gli altri.
+ * Quanti di quei secondi si riportano alla 1-0 (decisione di Teb dopo il
+ * collaudo di b43850d: senza riporto il livello 1 era quasi impossibile;
+ * spec telefono e finali §0). Da 0 a 30: si riportano sempre i primi
+ * `FIRST_STAGE_EXTRA_CARRY_S` secondi rimasti, più tutto quello che supera
+ * `FIRST_STAGE_EXTRA_S`. È l'unico numero da cambiare; dopo, `npm run
+ * gen:limits` e il Worker ridistribuito.
  */
-export const CARRY_FIRST_STAGE_EXTRA = false;
+export const FIRST_STAGE_EXTRA_CARRY_S = 15;
 
-/**
- * Secondi di grazia di ogni tappa di NORMAL: tempo che vale solo dentro la
- * tappa e non si riporta. Vuota se `CARRY_FIRST_STAGE_EXTRA` è vero.
- */
-export const STAGE_CARRY_GRACE: Readonly<Record<string, number>> = CARRY_FIRST_STAGE_EXTRA
-  ? {}
-  : { '0-0': FIRST_STAGE_EXTRA_S };
+/** Secondi in più di una tappa: `seconds` dentro il limite, `carried` riportabili. */
+export interface ExtraTime {
+  seconds: number;
+  carried: number;
+}
 
-/** La grazia di una tappa: `carryGrace`, o zero. Pura. */
-export function graceOf(stage: { carryGrace?: number }): number {
-  return stage.carryGrace ?? 0;
+/** Nessun secondo in più: il riporto è tutto il tempo rimasto. */
+export const NO_EXTRA_TIME: ExtraTime = { seconds: 0, carried: 0 };
+
+/** I secondi in più delle tappe di NORMAL: solo la 0-0. */
+export const STAGE_EXTRA_TIME: Readonly<Record<string, ExtraTime>> = {
+  '0-0': { seconds: FIRST_STAGE_EXTRA_S, carried: FIRST_STAGE_EXTRA_CARRY_S },
+};
+
+/** I secondi in più di una tappa: `extraTime`, o nessuno. Pura. */
+export function extraOf(stage: { extraTime?: ExtraTime }): ExtraTime {
+  return stage.extraTime ?? NO_EXTRA_TIME;
 }
 
 /**
  * Il tempo che passa alla tappa dopo, e su cui si calcola il bonus del
- * checkpoint: quello rimasto meno la grazia della tappa, mai negativo. Pura.
+ * checkpoint: i primi `extra.carried` secondi rimasti più quelli oltre
+ * `extra.seconds`, mai negativo. Senza secondi in più è il tempo rimasto.
+ * `src/shared/validate.ts` ne ha una copia (il Worker non importa il
+ * motore), controllata da un test. Pura.
  */
-export function carryAfterCheckpoint(left: number, grace: number): number {
-  return Math.max(0, left - grace);
+export function carryAfterCheckpoint(left: number, extra: ExtraTime): number {
+  const l = Math.max(0, left);
+  return Math.min(l, extra.carried) + Math.max(0, l - extra.seconds);
 }
 
 /** Tempo della tappa successiva: il suo limite più quello avanzato (spec §8). Pura. */

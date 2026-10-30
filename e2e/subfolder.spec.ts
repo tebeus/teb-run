@@ -4,7 +4,9 @@
 // un piccolo server statico le mette in /play/ e /game/. Titolo, radio e
 // gara devono caricare senza errori e senza nessuna richiesta fallita.
 
-import { expect, test, type Page } from '@playwright/test';
+import { devices, expect, test, type Page } from '@playwright/test';
+// @ts-expect-error: modulo .mjs degli strumenti, senza tipi.
+import { measureTitle, SLOW_4G } from '../tools/measure-title.mjs';
 import { execFileSync } from 'node:child_process';
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
@@ -182,20 +184,37 @@ async function measureBytes(page: Page, url: string): Promise<{ initial: number;
 }
 
 for (const [target, folder] of Object.entries(FOLDERS)) {
-  test(`${target} build: at most 8 MB before the title and 20 MB in all, measured on the network`, async ({ page }) => {
+  test(`${target} build: at most 1.5 MB before the title and 20 MB in all, measured on the network`, async ({ page }) => {
     const bytes = await measureBytes(page, `${ORIGIN}/${folder}/`);
     const mb = (n: number): string => `${(n / 1e6).toFixed(2)} MB`;
     console.log(`${target}: ${mb(bytes.initial)} before the title, ${mb(bytes.all)} in all (${bytes.files} files)`);
     mkdirSync('e2e/out', { recursive: true });
     writeFileSync(`e2e/out/light-weight-${target}.json`, `${JSON.stringify(bytes, null, 2)}\n`);
     expect(bytes.initial).toBeGreaterThan(500_000);
-    expect(bytes.initial).toBeLessThanOrEqual(8_000_000);
+    expect(bytes.initial).toBeLessThanOrEqual(1_500_000);
     expect(bytes.all).toBeLessThanOrEqual(20_000_000);
     // Il background aggiunge davvero qualcosa, e il conto della pagina torna con quello della rete.
     expect(bytes.all).toBeGreaterThan(bytes.initial);
     expect(Math.abs(bytes.seen - bytes.all)).toBeLessThan(bytes.all * 0.02);
   });
 }
+
+test('site build on slow 4G (1.6 Mbit/s, 150 ms), empty cache, phone: the title in under 8 s, and the wait if you start at once', async ({ browser }) => {
+  test.setTimeout(240_000);
+  const context = await browser.newContext({ ...devices['iPhone 13 landscape'], hasTouch: true });
+  const page = await context.newPage();
+  await page.route('https://api.tebrun.io/**', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: '{"rows":[]}' }),
+  );
+  const { titleMs, waitMs } = await measureTitle(page, `${ORIGIN}/${FOLDERS.site}/`, SLOW_4G);
+  console.log(`slow 4G: title after ${(titleMs / 1000).toFixed(1)} s, wait at an immediate start ${((waitMs ?? 0) / 1000).toFixed(1)} s`);
+  mkdirSync('e2e/out', { recursive: true });
+  writeFileSync('e2e/out/slow-4g-site.json', `${JSON.stringify({ titleMs, waitMs }, null, 2)}\n`);
+  expect(titleMs).toBeLessThan(8000);
+  // L'attesa finisce sempre, e la gara parte con la sua grafica.
+  expect(waitMs).not.toBeNull();
+  await context.close();
+});
 
 test('portal build: the ABOUT link on the title opens a new tab, the game stays', async ({ page, context }) => {
   // Nessuna rete esterna negli e2e: la pagina del sito è finta.

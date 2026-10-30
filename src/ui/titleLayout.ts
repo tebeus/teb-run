@@ -8,5 +8,11 @@ import type { Rect } from './rect';
  */
 export const DAILY_RECT: Rect = { x: 410, y: 466, w: 460, h: 104 };
 
+/**
+ * La voce ENDINGS del titolo (spec telefono e finali §C), in alto a
+ * sinistra: in alto a destra ci sono i punteggi e la modalità.
+ */
+export const ENDINGS_RECT: Rect = { x: 20, y: 14, w: 300, h: 64 };
+
 /** START della schermata della sfida (`screens/daily.ts`), in basso al centro come RETRY e CONTINUE. */
 export const DAILY_START_RECT: Rect = { x: 470, y: 612, w: 340, h: 84 };

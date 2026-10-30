@@ -351,7 +351,7 @@ describe('pausa nella schermata di gara', () => {
     const { screen, engines } = setup();
     const stub: Screen = { enter() {}, update: () => null, render() {} };
     const fsm = createFsm(
-      { title: stub, daily: stub, radio: stub, race: screen, ending: stub, gameOver: stub, nameEntry: stub, scores: stub },
+      { title: stub, daily: stub, radio: stub, race: screen, ending: stub, gameOver: stub, nameEntry: stub, scores: stub, endings: stub },
       'race',
     );
     // createFsm chiama enter() senza payload: brano 0.

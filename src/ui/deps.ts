@@ -2,6 +2,7 @@ import type { ParticleField } from '../render/effects';
 import type { WorldLayers } from '../render/world';
 import type { AssetStore, AudioBus, RaceEngine, RaceSnapshot, StageDef } from '../types';
 import type { CarSetting } from '../persist/car';
+import type { EndingsStore } from '../persist/endings';
 import type { ModeSetting } from '../persist/mode';
 import type { ScoresStore } from '../persist/scores';
 import type { SystemSignals } from '../core/signals';
@@ -40,6 +41,18 @@ export interface ScreenDeps {
   ) => void;
   firstStage: StageDef;
   now?: () => number;
+  /**
+   * Segno per chi misura (spec telefono e finali §B.3): la gara comincia
+   * (`true`) o smette (`false`) di aspettare gli sprite della tappa.
+   * Nessun dato. Assente, niente segni.
+   */
+  markStageWait?: (waiting: boolean) => void;
+  /**
+   * La collezione dei finali (spec telefono e finali §C): la pagina ENDINGS
+   * la legge, i finali e le fine partita la aggiornano. Assente, tutto
+   * chiuso.
+   */
+  endings?: EndingsStore;
   /**
    * Auto scelta (Set 7): la radio la cambia con C, la gara e i finali la
    * leggono. Assente vale l'auto nuova, e la radio non mostra la scelta.

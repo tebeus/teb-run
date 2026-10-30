@@ -1,3 +1,4 @@
+import { ENDINGS_RECT } from '../../../src/ui/titleLayout';
 import { describe, expect, test } from 'vitest';
 import { emptyActions } from '../../../src/core/input';
 import {
@@ -269,8 +270,9 @@ describe('createTitleScreen', () => {
 
     const titleRec = createRecordCtx();
     screen.render(titleRec.ctx);
+    // Fuori dalla voce ENDINGS in alto a sinistra (spec telefono e finali §C).
     const titleGlyphY = titleRec.ops
-      .filter((op) => op.type === 'fillRect' && op.fill !== '#000000')
+      .filter((op) => op.type === 'fillRect' && op.fill !== '#000000' && op.args[1] > ENDINGS_RECT.y + ENDINGS_RECT.h)
       .map((op) => op.args[1]);
     expect(titleGlyphY.length).toBeGreaterThan(0);
     expect(Math.min(...titleGlyphY)).toBeCloseTo(419, 0);

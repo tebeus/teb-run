@@ -14,6 +14,7 @@ import { streakLine } from '../persist/streak';
 import { go, type Transition } from './fsm';
 import { bestLine, isNewBest, personalBest } from './retryMenu';
 import type { StageDef } from '../types';
+import { visitedStages } from '../render/routeMap';
 
 export interface EndOfGame {
   /** La sfida della partita, o null. */
@@ -44,6 +45,8 @@ export function enterEndOfGame(
   celebrated: boolean,
 ): EndOfGame {
   const now = new Date(deps.now?.() ?? Date.now());
+  // Le tappe raggiunte, per la mappa della pagina ENDINGS (spec telefono e finali §C).
+  deps.endings?.recordStages(visitedStages(run.route));
   const daily = deps.daily?.current() ?? null;
   const mode = deps.mode?.get() ?? 'normal';
   if (daily !== null) {

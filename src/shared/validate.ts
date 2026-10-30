@@ -106,6 +106,16 @@ export function durationBounds(
   return { min, max: limits + (finished ? 0 : LIMITS.gameoverDecelS) + DURATION_SLACK_S };
 }
 
+/**
+ * Il riporto al checkpoint: copia di `carryAfterCheckpoint` di
+ * `src/game/timer.ts` (il Worker non importa il motore); un test le
+ * confronta. Pura.
+ */
+export function carryAfterCheckpoint(left: number, extra: { seconds: number; carried: number }): number {
+  const l = Math.max(0, left);
+  return Math.min(l, extra.carried) + Math.max(0, l - extra.seconds);
+}
+
 /** Punteggio massimo plausibile per le tappe raggiunte e la durata. Pura. */
 export function maxScore(
   stages: readonly { limits: StageLimits }[],
@@ -121,12 +131,15 @@ export function maxScore(
   // I checkpoint sono alla fine di ogni tappa tranne l'ultima raggiunta.
   for (let k = 0; k < stages.length - 1; k++) {
     const s = stages[k].limits;
-    // La grazia (la 0-0 di NORMAL) non si riporta e non fa bonus, come nel gioco.
-    reserve = Math.max(0, reserve + s.limit[mode] - s.length / LIMITS.maxSpeedSegmentsPerSecond - s.grace[mode]);
+    // Dei secondi in più (la 0-0 di NORMAL) se ne riportano solo alcuni, come nel gioco.
+    reserve = carryAfterCheckpoint(reserve + s.limit[mode] - s.length / LIMITS.maxSpeedSegmentsPerSecond, s.extra[mode]);
     checkpoints += LIMITS.checkpointBonusPerSecond * reserve;
   }
-  const carried = stages.reduce((t, s) => t + s.limits.limit[mode] - s.limits.grace[mode], 0);
-  const finish = finished ? LIMITS.finishBonusPerSecond * Math.max(0, carried - durationS + 1) : 0;
+  // Chi arriva alla fine della 0-0 con meno di `carried` secondi non ne
+  // perde nessuno: il tempo che può restare all'arrivo è al più la somma
+  // dei limiti meno la durata.
+  const limits = stages.reduce((t, s) => t + s.limits.limit[mode], 0);
+  const finish = finished ? LIMITS.finishBonusPerSecond * Math.max(0, limits - durationS + 1) : 0;
   return SCORE_FACTOR * (drive + overtakes + checkpoints + finish) + SCORE_SLACK;
 }
 

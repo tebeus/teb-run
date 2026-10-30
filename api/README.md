@@ -88,10 +88,11 @@ del progetto.
 
 ## Ridistribuzione dopo la prima tappa a 110 s (binario M)
 
-La 0-0 di NORMAL è passata da 80 a 110 s: 30 s in più che valgono solo nella prima
-tappa e non si riportano (`CARRY_FIRST_STAGE_EXTRA` in `src/game/timer.ts`). La
-tabella `src/shared/limits.ts` è rigenerata (`limit.normal` 110, `grace.normal` 30
-per la 0-0), quindi **il Worker va ridistribuito prima del gioco**:
+La 0-0 di NORMAL è passata da 80 a 110 s: 30 s in più per la prima tappa. Se ne
+riportano alla 1-0 i primi `FIRST_STAGE_EXTRA_CARRY_S` rimasti (15), più tutto quello
+che supera i 30 (`src/game/timer.ts`; binario N). La tabella `src/shared/limits.ts` è
+rigenerata (`limit.normal` 110, `extra.normal` `{ seconds: 30, carried: 15 }` per la
+0-0), quindi **il Worker va ridistribuito prima del gioco**:
 
 ```sh
 cd api
@@ -104,9 +105,16 @@ Poi la build `site`. In quest'ordine nessuna partita vera viene rifiutata:
 - il Worker vecchio rifiuterebbe come `duration` le partite lunghe del gioco nuovo, per esempio un game over alla
   1-1 dopo 180 s (oggi il massimo è 154).
 
-Nessuna migrazione D1. Se un giorno si cambia `CARRY_FIRST_STAGE_EXTRA`, si rilancia
+Nessuna migrazione D1. Se un giorno si cambia `FIRST_STAGE_EXTRA_CARRY_S`, si rilancia
 `npm run gen:limits` e si ridistribuisce il Worker allo stesso modo: la durata
 massima non cambia, cambia solo il tetto del punteggio.
+
+### Binario N: riporto di 15 s (30 ottobre)
+
+Rispetto a b43850d cambia solo il tetto del punteggio, che sale: il Worker va
+ridistribuito **prima** del gioco, altrimenti il Worker vecchio rifiuterebbe come
+`score` le partite buone del gioco nuovo. La durata massima resta la stessa
+(game over alla 1-1: 184 s).
 
 ## Esempio di `/daily`
 

@@ -50,6 +50,7 @@ describe('createFsm glue: transition tick semantics', () => {
       gameOver: makePlaceholder('G', 'nameEntry'),
       nameEntry: makePlaceholder('N', 'scores'),
       scores: makePlaceholder('S', 'title'),
+      endings: makePlaceholder('F', 'title'),
     };
     const fsm = createFsm(screens, 'title');
     t.dispatchEvent(key('keydown', 'Enter'));

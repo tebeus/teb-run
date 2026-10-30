@@ -10,7 +10,7 @@ import { createNullAudio } from '../../../src/dev/null-audio';
 import { createScoresStore } from '../../../src/persist/scores';
 import { dailyChallenge } from '../../../src/shared/daily';
 import { createDailySession } from '../../../src/ui/dailySession';
-import { ATTRACT_PHASE_S, createTitleScreen, initialTitleState, PRESS_ENTER_Y, stepTitle, STREAK_COLOR, STREAK_Y, type TitleState } from '../../../src/ui/screens/title';
+import { ATTRACT_PHASE_S, COUNTDOWN_COLOR, createTitleScreen, initialTitleState, PRESS_ENTER_Y, stepTitle, STREAK_COLOR, STREAK_Y, titleDailyLine, type TitleState } from '../../../src/ui/screens/title';
 import { createStreakStore } from '../../../src/persist/streak';
 import { createRecordCtx } from '../../helpers/recordCtx';
 import { DAILY_RECT } from '../../../src/ui/titleLayout';
@@ -67,10 +67,12 @@ describe('title: DAILY CHALLENGE', () => {
     expect(step(s, { click: inDaily }).transition?.to).toBe('radio');
   });
 
-  test('without the daily challenge (no session) the title is the one of before', () => {
+  test('without the daily challenge (no session) there is no DAILY choice: down goes to ENDINGS, and a click there starts', () => {
     let s = stepTitle(initialTitleState(), 1 / 60, act(), false).state;
-    s = stepTitle(s, 1 / 60, act({ brake: true }), false).state;
     expect(stepTitle(s, 1 / 60, act({ confirm: true }), false).transition?.to).toBe('radio');
+    s = stepTitle(s, 1 / 60, act({ brake: true }), false).state;
+    expect(s.choice).toBe('endings');
+    expect(stepTitle(s, 1 / 60, act({ confirm: true }), false).transition?.to).toBe('endings');
     expect(stepTitle(s, 1 / 60, act({ click: inDaily }), false).transition?.to).toBe('radio');
   });
 
@@ -134,5 +136,41 @@ describe('title: DAILY CHALLENGE', () => {
     };
     createTitleScreen(deps).enter(undefined);
     expect(daily.current()).toBeNull();
+  });
+});
+
+describe('countdown under DAILY CHALLENGE (spec telefono e finali §D)', () => {
+  test('the line: the countdown alone, or after the streak, with the words of the end of a game', () => {
+    const now = new Date('2026-10-30T18:48:00Z');
+    expect(titleDailyLine(now, 0)).toEqual({ streak: null, next: 'NEW CHALLENGE IN 5H 12M' });
+    expect(titleDailyLine(now, 3)).toEqual({ streak: 'DAY 3 IN A ROW', next: 'NEW CHALLENGE IN 5H 12M' });
+    expect(titleDailyLine(new Date('2026-10-30T23:59:30Z'), 0).next).toBe('NEW CHALLENGE IN 1M');
+    expect(titleDailyLine(new Date('2026-10-31T00:00:30Z'), 0).next).toBe('NEW CHALLENGE IN 23H 59M');
+  });
+
+  test('on the title it updates by itself, and at UTC midnight it starts again from 23H 59M without a reload', () => {
+    let t = Date.parse('2026-10-30T23:59:00Z');
+    const deps: ScreenDeps = {
+      assets: createEmptyAssets(),
+      audio: createNullAudio(),
+      scores: createScoresStore(),
+      raceFactory: (s, a) => createFakeRace(s, a),
+      renderWorld: () => {},
+      firstStage: { id: '0-0', name: 'Palm Bay', theme: 'beach', lengthSegments: 100, timeLimit: 80, seed: 1, difficulty: 0.15 },
+      daily: createDailySession(),
+      now: () => t,
+    };
+    const screen = createTitleScreen(deps);
+    screen.enter(undefined);
+    const grey = (): number => {
+      const rec = createRecordCtx();
+      screen.render(rec.ctx);
+      return rec.fills().filter((op) => op.fill === COUNTDOWN_COLOR && op.args[1] >= STREAK_Y - 2 && op.args[1] < STREAK_Y + 20).length;
+    };
+    const before = grey();
+    expect(before).toBeGreaterThan(0);
+    t = Date.parse('2026-10-31T00:00:30Z');
+    // `IN 1M` → `IN 23H 59M`: più glifi, più pixel accesi.
+    expect(grey()).toBeGreaterThan(before);
   });
 });

@@ -1,6 +1,6 @@
 import type { StageDef, ThemeId, Weather } from '../types';
 import { createStageGraph, indexOf, levelOf, type StageGraph } from './stage-graph';
-import { STAGE_CARRY_GRACE, STAGE_TIME_LIMITS, timeLimitFor } from './timer';
+import { STAGE_EXTRA_TIME, STAGE_TIME_LIMITS, timeLimitFor } from './timer';
 
 /**
  * **Definiti in `game/stage-graph.ts`**; qui solo inoltrati, perché la
@@ -155,7 +155,7 @@ export function stageFromSpec(spec: StageSpec): StageDef {
     theme: spec.theme,
     lengthSegments: lengthFor(spec.difficulty),
     timeLimit: stageTimeLimit(level, spec.difficulty, spec.id),
-    ...(STAGE_CARRY_GRACE[spec.id] === undefined ? {} : { carryGrace: STAGE_CARRY_GRACE[spec.id] }),
+    ...(STAGE_EXTRA_TIME[spec.id] === undefined ? {} : { extraTime: STAGE_EXTRA_TIME[spec.id] }),
     seed: stageSeed(spec.id),
     difficulty: spec.difficulty,
     lanes: THEME_ROAD[spec.theme].lanes,

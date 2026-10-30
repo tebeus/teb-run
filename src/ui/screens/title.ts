@@ -1,5 +1,6 @@
 import { LOGICAL_H, LOGICAL_W } from '../../core/canvas';
 import { GAME_NAME } from '../../core/config';
+import { stagedOf } from '../../core/assets';
 import { emptyActions } from '../../core/input';
 import { modeLabel } from '../../game/mode';
 import { FIRST_STAGE_ID } from '../../game/stages';
@@ -13,9 +14,11 @@ import { drawText, drawTextOutlined } from '../text';
 import { engineParams } from './race';
 import { titleStartLine } from '../controlsHelp';
 import { inside, type Rect } from '../rect';
-import { DAILY_RECT } from '../titleLayout';
+import { DAILY_RECT, ENDINGS_RECT } from '../titleLayout';
+import { endingsCount } from './endings';
 import { drawMenuButton } from '../retryMenu';
 import { challengeLabel } from '../dailySession';
+import { drawDailyLine, STREAK_Y_OFFSET, titleDailyLine } from '../dailyLine';
 import { dailyChallenge, dailyKey } from '../../shared/daily';
 
 /**
@@ -61,6 +64,31 @@ export function attractFade(t: number): number {
   if (!(ATTRACT_FADE_S > 0) || within >= ATTRACT_FADE_S) return 1;
   return within / ATTRACT_FADE_S;
 }
+/**
+ * La fase che si mostra davvero (spec telefono e finali §B.2): la gara
+ * dimostrativa solo con gli sprite della prima tappa arrivati, la mappa
+ * solo con `map_full`; altrimenti resta il titolo, mai un ripiego
+ * procedurale. Pura.
+ */
+export function shownPhase(phase: AttractPhase, ready: { stage: boolean; map: boolean }): AttractPhase {
+  if (phase === 'demo' && !ready.stage) return 'title';
+  if (phase === 'map' && !ready.map) return 'title';
+  return phase;
+}
+
+/**
+ * La dissolvenza di `attractFade`, ma solo se la fase mostrata cambia
+ * davvero: dal titolo al titolo (gara o mappa non ancora pronte) niente
+ * nero. Pura.
+ */
+export function shownFade(t: number, ready: { stage: boolean; map: boolean }): number {
+  const fade = attractFade(t);
+  if (fade >= 1) return fade;
+  const before = Math.max(0, t - (t % ATTRACT_PHASE_S) - ATTRACT_PHASE_S / 2);
+  const was = t < ATTRACT_PHASE_S ? null : shownPhase(attractPhase(before), ready);
+  return was === shownPhase(attractPhase(t), ready) ? 1 : fade;
+}
+
 /** Velocità di crociera dell'autopilota, frazione di maxSpeed (spec §11). */
 export const ATTRACT_SPEED_PERCENT = 0.6;
 /** Oltre questo scarto dal centro l'autopilota sterza; sotto, lascia stare. */
@@ -72,7 +100,7 @@ export interface TitleState {
   idleT: number;
   blinkT: number;
   /** La voce accesa per ENTER: START (come sempre) o DAILY, scelta con su e giù. */
-  choice: 'start' | 'daily';
+  choice: 'start' | 'daily' | 'endings';
   prevUp: boolean;
   prevDown: boolean;
 }
@@ -125,15 +153,24 @@ export function stepTitle(
       return { state: { ...state, ...edges }, transition: go('daily', undefined) };
     }
   }
+  // La voce ENDINGS (spec telefono e finali §C): col dito, col clic, o scelta con su e giù.
+  const endingsShown = dailyShown(attractPhase(state.idleT));
+  if (endingsShown && (actions.endings || (actions.click && inside(ENDINGS_RECT, actions.click.x, actions.click.y)))) {
+    return { state: { ...state, ...edges }, transition: go('endings', undefined) };
+  }
   if (actions.confirm || actions.click || actions.daily) {
-    const to = daily && state.choice === 'daily' && !actions.click ? go('daily', undefined) : go('radio', undefined);
+    const picked = actions.click ? 'start' : state.choice;
+    const to =
+      picked === 'endings' ? go('endings', undefined) : daily && picked === 'daily' ? go('daily', undefined) : go('radio', undefined);
     return { state: { ...state, ...edges }, transition: to };
   }
 
   // Su e giù (tastiera, croce del gamepad) cambiano voce; il fronte, perché
   // sono azioni tenute. Con ENTER nello stesso tick (A = gas e conferma) vince ENTER, sopra.
   let choice = state.choice;
-  if (daily && ((up && !state.prevUp) || (down && !state.prevDown))) choice = choice === 'start' ? 'daily' : 'start';
+  const choices: TitleState['choice'][] = daily ? ['start', 'daily', 'endings'] : ['start', 'endings'];
+  const step = down && !state.prevDown ? 1 : up && !state.prevUp ? -1 : 0;
+  if (step !== 0) choice = choices[(choices.indexOf(choice) + step + choices.length) % choices.length];
 
   const idleT = anyActionHeld(actions) ? 0 : state.idleT + dt;
   const blinkT = state.blinkT + dt;
@@ -208,6 +245,8 @@ export function createTitleScreen(deps: ScreenDeps): Screen {
   let engine: RaceEngine | null = null;
   let snapshot: RaceSnapshot | null = null;
   let topScores: ScoreEntry[] = [];
+  /** Quanti finali visti, per `ENDINGS 2 / 5`: letto in enter(). */
+  let endingsSeen = 0;
 
   /** L'illustrazione dell'attract mode, il logo e i primi punteggi. */
   const drawTitlePhase = (ctx: CanvasRenderingContext2D): void => {
@@ -240,6 +279,14 @@ export function createTitleScreen(deps: ScreenDeps): Screen {
     drawText(ctx, 'ROUTE MAP', LOGICAL_W / 2, 40, 4, '#ffffff', 'center');
   };
 
+  /** Gara dimostrativa e mappa sono pronte? Le chiede in testa al background. */
+  const attractReady = (): { stage: boolean; map: boolean } => {
+    const staged = stagedOf(deps.assets);
+    if (staged === null) return { stage: true, map: true };
+    const first = { id: deps.firstStage.id, theme: deps.firstStage.theme };
+    return { stage: staged.requestStage(first, deps.car?.get() ?? 'new'), map: staged.requestFile?.('map_full') ?? true };
+  };
+
   const drawPhase = (ctx: CanvasRenderingContext2D, phase: AttractPhase): void => {
     if (phase === 'title') drawTitlePhase(ctx);
     else if (phase === 'demo') drawDemoPhase(ctx);
@@ -258,6 +305,7 @@ export function createTitleScreen(deps: ScreenDeps): Screen {
       // snapshot, la classifica non cambia sotto i piedi di questa
       // schermata fra un enter() e il successivo.
       topScores = deps.scores.load().slice(0, TOP_SCORES_SHOWN);
+      endingsSeen = deps.endings?.load().seen.length ?? 0;
     },
     update(dt, actions) {
       if (engine !== null && snapshot !== null) {
@@ -270,13 +318,14 @@ export function createTitleScreen(deps: ScreenDeps): Screen {
     },
     render(ctx) {
       const t = state.idleT;
-      const phase = attractPhase(t);
+      const ready = attractReady();
+      const phase = shownPhase(attractPhase(t), ready);
       drawPhase(ctx, phase);
       // Dissolvenza attraverso il nero (spec §11): un velo nero sopra la
       // fase nuova, che si alza in ATTRACT_FADE_S secondi. Non si
       // sovrappongono due fasi con `globalAlpha`, perché `renderWorld`
       // rimette l'alfa a 1 più volte dentro un fotogramma.
-      const fade = attractFade(t);
+      const fade = shownFade(t, ready);
       if (fade < 1) {
         ctx.globalAlpha = 1 - fade;
         ctx.fillStyle = '#000000';
@@ -293,14 +342,15 @@ export function createTitleScreen(deps: ScreenDeps): Screen {
         const y = phase === 'map' ? PRESS_ENTER_MAP_Y : PRESS_ENTER_Y;
         const line = titleStartLine(deps.device?.() ?? 'keyboard');
         // Con DAILY scelto da tastiera o gamepad la partenza normale si spegne un po'.
-        drawTextOutlined(ctx, line, LOGICAL_W / 2, y, 3, state.choice === 'daily' ? '#888888' : '#ffffff', 'center');
+        drawTextOutlined(ctx, line, LOGICAL_W / 2, y, 3, state.choice !== 'start' ? '#888888' : '#ffffff', 'center');
       }
+      if (dailyShown(phase)) drawEndingsButton(ctx, endingsSeen, state.choice === 'endings');
       if (deps.daily !== undefined && dailyShown(phase)) {
         drawDailyButton(ctx, DAILY_RECT, state.choice === 'daily', deps.now);
-        // La serie di giorni, da 2 in su (spec prima tappa e ritorno §5).
-        const today = dailyKey(new Date(deps.now?.() ?? Date.now()));
-        const streak = streakLine(deps.streak?.current(today) ?? 0);
-        if (streak !== null) drawTextOutlined(ctx, streak, LOGICAL_W / 2, STREAK_Y, 2, STREAK_COLOR, 'center');
+        // La serie di giorni, da 2 in su (spec prima tappa e ritorno §5), e
+        // il conto alla rovescia della sfida (spec telefono e finali §D).
+        const now = new Date(deps.now?.() ?? Date.now());
+        drawDailyLine(ctx, titleDailyLine(now, deps.streak?.current(dailyKey(now)) ?? 0), LOGICAL_W / 2, STREAK_Y);
       }
     },
     exit() {
@@ -313,9 +363,19 @@ export function createTitleScreen(deps: ScreenDeps): Screen {
   };
 }
 
-/** La riga della serie, sotto il pulsante DAILY e sopra la fascia dei link (da y 630). */
-export const STREAK_Y = DAILY_RECT.y + DAILY_RECT.h + 14;
-export const STREAK_COLOR = '#ffaa33';
+/** La riga della serie e del conto alla rovescia, sotto il pulsante DAILY e sopra la fascia dei link (da y 630). */
+export const STREAK_Y = DAILY_RECT.y + DAILY_RECT.h + STREAK_Y_OFFSET;
+export { COUNTDOWN_COLOR, drawDailyLine, STREAK_COLOR, titleDailyLine } from '../dailyLine';
+
+/** `ENDINGS 2 / 5`, in alto a sinistra; anche a zero finali (risposta di Teb). Pura. */
+export function endingsButtonLabel(seen: number): string {
+  return `ENDINGS ${endingsCount(seen)}`;
+}
+
+/** La voce ENDINGS del titolo, accesa quando la tastiera o il gamepad la scelgono. */
+function drawEndingsButton(ctx: CanvasRenderingContext2D, seen: number, lit: boolean): void {
+  drawMenuButton(ctx, ENDINGS_RECT, endingsButtonLabel(seen), 2, lit);
+}
 
 /**
  * DAILY CHALLENGE, con la sfida di oggi in piccolo (`RETRO · HARD`): acceso

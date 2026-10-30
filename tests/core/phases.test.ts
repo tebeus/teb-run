@@ -7,9 +7,12 @@ import {
   backgroundRank,
   groupOf,
   isInitial,
+  phaseOf,
+  TITLE_SPRITES,
   neededFor,
   successorIds,
 } from '../../src/core/phases';
+import { FIRST_STAGE_SPRITES } from '../../src/core/firstStageSprites';
 import { ALL_CARS } from '../../src/game/car';
 import { REAL_GRAPH, STAGES, THEME_ROAD } from '../../src/game/stages';
 import { NO_ART } from '../helpers/art';
@@ -52,22 +55,26 @@ describe('initial phase', () => {
     expect(FIRST_STAGE).toEqual({ id: first.id, theme: first.theme });
   });
 
-  test.skipIf(NO_ART)('the first stage with the chosen car, every car preview, nothing of other themes or endings', () => {
+  test.skipIf(NO_ART)('phase 0 is only the title and the radio: their sprites and every car preview', () => {
     const initial = MANIFEST_KEYS.filter((key) => isInitial(key, FIRST_STAGE, 'sport'));
-    expect(initial).toContain('title_logo');
-    expect(initial).toContain('screen_attract');
-    expect(initial).toContain('radio_panel');
-    expect(initial).toContain('beach_palm_1');
-    expect(initial).toContain('bg_beach_far');
-    expect(initial).toContain('player_sport_spin_3');
-    expect(initial).toContain('player_retro_straight');
-    expect(initial).toContain('player_straight');
-    expect(initial).not.toContain('player_spin_3');
-    expect(initial).not.toContain('alpine_pine_1');
-    expect(initial).not.toContain('bg_town_near');
-    expect(initial).not.toContain('bg_3-1_far');
-    expect(initial.some((key) => key.startsWith('ending_'))).toBe(false);
-    expect(initial.length).toBeLessThan(MANIFEST_KEYS.length * 0.7);
+    for (const key of ['title_logo', 'screen_attract', 'radio_panel', 'radio_track_icons', 'menu_cursor', 'player_retro_straight', 'player_straight', 'player_sport_straight']) {
+      expect(initial, key).toContain(key);
+    }
+    for (const key of ['beach_palm_1', 'bg_beach_far', 'player_sport_spin_3', 'traffic_bus', 'map_full', 'asphalt']) {
+      expect(initial, key).not.toContain(key);
+    }
+    expect(initial.every((key) => TITLE_SPRITES.includes(key) || key.endsWith('_straight'))).toBe(true);
+  });
+
+  test.skipIf(NO_ART)('phase 1 is the first stage with the chosen car: its theme, what it draws, the effects', () => {
+    const phase = (key: string) => phaseOf(key, FIRST_STAGE, 'sport');
+    for (const key of ['beach_palm_1', 'bg_beach_far', 'player_sport_spin_3', 'traffic_bus', 'asphalt', 'race_start_lights', 'race_checkpoint', 'fx_sparks', 'fx_grass_spray']) {
+      expect(phase(key), key).toBe(1);
+    }
+    for (const key of ['map_full', 'ground_snow_road', 'race_goal', 'player_spin_3', 'alpine_pine_1', 'bg_town_near', 'bg_3-1_far', 'ending_1', 'transition_sunset']) {
+      expect(phase(key), key).toBe(2);
+    }
+    for (const key of FIRST_STAGE_SPRITES) expect(MANIFEST_KEYS, key).toContain(key);
   });
 
   test('neededFor a stage: shared, its theme, its own background and the car', () => {
@@ -77,6 +84,9 @@ describe('initial phase', () => {
     expect(neededFor('bg_4-1_far', stage, 'new')).toBe(false);
     expect(neededFor('beach_hut', stage, 'new')).toBe(false);
     expect(neededFor('traffic_van', stage, 'new')).toBe(true);
+    // Per le altre tappe ogni file condiviso; per la prima solo i suoi.
+    expect(neededFor('ground_snow_road', stage, 'new')).toBe(true);
+    expect(neededFor('ground_snow_road', FIRST_STAGE, 'new')).toBe(false);
     expect(neededFor('player_brake', stage, 'new')).toBe(true);
     expect(neededFor('player_retro_brake', stage, 'new')).toBe(false);
     expect(neededFor('ending_1', stage, 'new')).toBe(false);

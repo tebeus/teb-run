@@ -17,6 +17,8 @@ import {
   apiCspProblems,
   MAX_FILES,
   MAX_INITIAL_BYTES,
+  MAX_FIRST_STAGE_BYTES,
+  isAudioFile,
   MAX_TOTAL_BYTES,
   nameProblems,
   outsideOrigins,
@@ -72,12 +74,19 @@ describe('WebP in site and portal (launch, point 12)', () => {
     });
   });
 
-  test('weightProblems: over 20 MB in all or 8 MB before the title', () => {
-    expect(weightProblems({ total: 19_000_000, initial: 7_000_000 })).toEqual([]);
-    expect(weightProblems({ total: 21_000_000, initial: 9_000_000 })).toEqual([
+  test('weightProblems: over 20 MB in all, 1.5 MB before the title or 3 MB for the first stage', () => {
+    expect(weightProblems({ total: 19_000_000, initial: 1_400_000, firstStage: 2_900_000 })).toEqual([]);
+    expect(weightProblems({ total: 21_000_000, initial: 1_600_000, firstStage: 3_100_000 })).toEqual([
       'total 21.00 MB over 20.00 MB',
-      'initial phase 9.00 MB over 8.00 MB',
+      'initial phase 1.60 MB over 1.50 MB',
+      'first-stage phase 3.10 MB over 3.00 MB',
     ]);
+  });
+
+  test('the engine audio comes at the first touch, after the title', () => {
+    expect(isAudioFile('audio/engine_low.ogg')).toBe(true);
+    expect(isAudioFile('audio/manifest.json')).toBe(false);
+    expect(isAudioFile('assets/index.js')).toBe(false);
   });
 });
 
@@ -300,11 +309,12 @@ describe('site, portal and crazygames, built for real', () => {
     }
   });
 
-  test.skipIf(NO_ART)('within the weight limits: 20 MB in all, 8 MB before the title', () => {
+  test.skipIf(NO_ART)('within the weight limits: 20 MB in all, 1.5 MB before the title, 3 MB for the first stage', () => {
     for (const target of ['site', 'portal', 'crazygames']) {
-      const weights = buildWeights(join(dir, target)) as { total: number; initial: number };
+      const weights = buildWeights(join(dir, target)) as { total: number; initial: number; firstStage: number };
       expect(weights.total, target).toBeLessThanOrEqual(MAX_TOTAL_BYTES);
       expect(weights.initial, target).toBeLessThanOrEqual(MAX_INITIAL_BYTES);
+      expect(weights.firstStage, target).toBeLessThanOrEqual(MAX_FIRST_STAGE_BYTES);
       expect(weights.initial, target).toBeLessThan(weights.total);
     }
   });

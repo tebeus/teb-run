@@ -55,6 +55,7 @@ export function emptyActions(): Actions {
     mute: false,
     pause: false,
     daily: false,
+    endings: false,
   };
 }
 

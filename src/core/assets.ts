@@ -406,6 +406,14 @@ export interface StagedAssets {
    * il ripiego procedurale). Prima del manifest è falso.
    */
   requestStage(stage: StageNeed, car: string): boolean;
+  /** I file della tappa `stage` con l'auto `car` già risolti, sui suoi totali: la barra dell'attesa. */
+  stageProgress?(stage: StageNeed, car: string): LoadProgress;
+  /**
+   * Mette in testa al background il file `file` del manifest (`map_full`,
+   * `ending_3`) e dice se è risolto. Vero anche se il manifest non lo
+   * elenca: non c'è niente da aspettare.
+   */
+  requestFile?(file: string): boolean;
 }
 
 /** Le fasi di `store`, se le ha (uno store di test o la galleria possono non averle). */
@@ -450,9 +458,10 @@ const THEME_LEVEL: Record<string, number> = (() => {
  * catena di fallback della spec §13. Non rigetta mai: un asset mancante è
  * sempre sostituito, e `stats` dice da dove arriva ciascuno.
  *
- * Con `start` il caricamento va a fasi (lancio, punto 12): `ready` aspetta
- * solo i file di `isInitial` (titolo, radio, prima tappa con l'auto scelta),
- * il resto arriva dopo in background (`all`), nell'ordine di
+ * Con `start` il caricamento va a fasi (lancio, punto 12; spec telefono e
+ * finali §B.2): `ready` aspetta solo i file di `isInitial` (titolo e
+ * radio), poi in testa al background arriva la prima tappa con l'auto
+ * scelta, e il resto dopo (`all`), nell'ordine di
  * `backgroundRank`, con `requestStage` che passa avanti. Finché un file non
  * è arrivato, `get` dà il ripiego procedurale, poi l'immagine vera. Senza
  * `start` è tutto della fase iniziale, come prima.
@@ -613,6 +622,13 @@ export function loadAssets(options: {
     stats.missing = counted.missing;
     env.log(summaryLine(stats, SPRITE_NAMES.length));
     initialDone = true;
+    // Fase 1 (spec telefono e finali §B.2): la prima tappa con l'auto
+    // scelta passa in testa al background, mentre si è su titolo e radio.
+    if (start) {
+      for (const job of found.values()) {
+        if (job.state === 'queued' && neededFor(job.key, start.stage, start.car)) job.rank = -1;
+      }
+    }
     pump();
   })();
 
@@ -643,13 +659,34 @@ export function loadAssets(options: {
     hasStageBg(name: SpriteName): boolean {
       return stageBgReal.has(name);
     },
+    stageProgress(stage: StageNeed, car: string): LoadProgress {
+      if (jobs === null) return { done: 0, total: 1 };
+      let done = 0;
+      let total = 0;
+      for (const job of jobs.values()) {
+        if (!neededFor(job.key, stage, car)) continue;
+        total += 1;
+        if (job.state === 'done') done += 1;
+      }
+      return { done, total };
+    },
+    requestFile(file: string): boolean {
+      if (jobs === null) return false;
+      const job = jobs.get(file);
+      if (job === undefined) return true;
+      if (job.state === 'queued') job.rank = -2;
+      pump();
+      return job.state === 'done';
+    },
     requestStage(stage: StageNeed, car: string): boolean {
       if (jobs === null) return false;
       let settled = true;
       for (const job of jobs.values()) {
         if (!neededFor(job.key, stage, car)) continue;
         if (job.state !== 'done') settled = false;
-        if (job.state === 'queued') job.rank = -1;
+        // Una tappa chiesta da chi guida passa davanti a tutto: ai file
+        // chiesti da soli (-2) e alla fase 1 (-1).
+        if (job.state === 'queued') job.rank = -3;
       }
       pump();
       return settled;

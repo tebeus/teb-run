@@ -10,8 +10,9 @@
 //   costruisce, in qualunque file, PNG compresi;
 // - un brano personale di public/music/custom/;
 // - `_headers` mancante nella site, o presente in un'altra;
-// - più di 20 MB in tutto, o più di 8 MB scaricati prima del titolo (la fase
-//   iniziale del caricamento, src/core/phases.ts), o più di 1500 file;
+// - più di 20 MB in tutto, più di 1,5 MB scaricati prima del titolo (la fase
+//   0 del caricamento, src/core/phases.ts), più di 3 MB per la prima tappa
+//   (la fase 1), o più di 1500 file;
 // - una CSP sbagliata per le statistiche: nella site l'origine GoatCounter
 //   deve stare in connect-src e img-src e in nient'altro; nelle altre il
 //   suo host non deve comparire in nessun file;
@@ -39,7 +40,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { listFiles, zipDir, zipEntries } from './zip-build.mjs';
-import { FIRST_STAGE, PHASE_CARS, isInitial } from '../src/core/phases.ts';
+import { FIRST_STAGE, PHASE_CARS, phaseOf } from '../src/core/phases.ts';
 import { ABOUT_URL, PRIVACY_URL, SITE_DOMAIN } from '../src/core/config.ts';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
@@ -59,17 +60,33 @@ export function forbiddenStrings() {
   return out;
 }
 
-/** Tetti di peso delle build pubbliche (lancio, punto 12), in byte (MB decimali). */
+/**
+ * Tetti di peso delle build pubbliche (lancio, punto 12; spec telefono e
+ * finali §B.2), in byte (MB decimali): prima del titolo al più 1,5 MB (il
+ * titolo in meno di 8 s in 4G lento, 1,6 Mbit/s); la prima tappa, che arriva
+ * mentre si è su titolo e radio, al più 3 MB.
+ */
 export const MAX_TOTAL_BYTES = 20_000_000;
-export const MAX_INITIAL_BYTES = 8_000_000;
+export const MAX_INITIAL_BYTES = 1_500_000;
+export const MAX_FIRST_STAGE_BYTES = 3_000_000;
 /** Tetto di file di CrazyGames, che vale come buona misura per ogni portale. */
 export const MAX_FILES = 1500;
 
 /**
+ * L'audio (`audio/`) si scarica al primo tocco (`core/audioUnlock.ts`), quindi
+ * dopo il titolo: conta nella fase della prima tappa. Pura.
+ */
+export function isAudioFile(file) {
+  return file.startsWith('audio/') && !file.endsWith('.json');
+}
+
+/**
  * Pesi della build in `dir`: `total` è tutto; `initial` è ciò che si scarica
- * prima del titolo, cioè ogni file che non è uno sprite più gli sprite della
- * fase iniziale (`isInitial` di src/core/phases.ts) con la prima tappa e
- * l'auto più pesante fra quelle della build (l'auto ricordata cambia la fase).
+ * prima del titolo, cioè ogni file che non è uno sprite né audio più gli
+ * sprite della fase 0 (`phaseOf` di src/core/phases.ts); `firstStage` è ciò
+ * che arriva dopo il titolo per la prima tappa (la fase 1 e l'audio). Le
+ * fasi si misurano con l'auto più pesante fra quelle della build (l'auto
+ * ricordata cambia la fase 1).
  */
 export function buildWeights(dir) {
   const files = listFiles(dir);
@@ -82,25 +99,35 @@ export function buildWeights(dir) {
     // senza manifest nessuno sprite è chiesto: resta il resto
   }
   const spriteFiles = new Set(Object.entries(manifest).map(([key, entry]) => `sprites/${entry.file ?? `${key}.png`}`));
-  const base = files.filter((file) => !spriteFiles.has(file)).reduce((sum, file) => sum + size(file), 0);
+  const others = files.filter((file) => !spriteFiles.has(file));
+  const base = others.filter((file) => !isAudioFile(file)).reduce((sum, file) => sum + size(file), 0);
+  const audio = others.filter(isAudioFile).reduce((sum, file) => sum + size(file), 0);
   let initial = base;
+  let firstStage = audio;
   for (const car of PHASE_CARS) {
-    let bytes = base;
+    const bytes = [base, audio, 0];
     for (const [key, entry] of Object.entries(manifest)) {
       const file = `sprites/${entry.file ?? `${key}.png`}`;
-      if (files.includes(file) && isInitial(key, FIRST_STAGE, car)) bytes += size(file);
+      if (files.includes(file)) bytes[phaseOf(key, FIRST_STAGE, car)] += size(file);
     }
-    initial = Math.max(initial, bytes);
+    initial = Math.max(initial, bytes[0]);
+    firstStage = Math.max(firstStage, bytes[1]);
   }
-  return { total, initial };
+  return { total, initial, firstStage };
 }
 
 /** Problemi di peso: oltre i tetti. Pura. */
-export function weightProblems({ total, initial }, maxTotal = MAX_TOTAL_BYTES, maxInitial = MAX_INITIAL_BYTES) {
+export function weightProblems(
+  { total, initial, firstStage = 0 },
+  maxTotal = MAX_TOTAL_BYTES,
+  maxInitial = MAX_INITIAL_BYTES,
+  maxFirstStage = MAX_FIRST_STAGE_BYTES,
+) {
   const mb = (n) => `${(n / 1e6).toFixed(2)} MB`;
   const out = [];
   if (total > maxTotal) out.push(`total ${mb(total)} over ${mb(maxTotal)}`);
   if (initial > maxInitial) out.push(`initial phase ${mb(initial)} over ${mb(maxInitial)}`);
+  if (firstStage > maxFirstStage) out.push(`first-stage phase ${mb(firstStage)} over ${mb(maxFirstStage)}`);
   return out;
 }
 
@@ -317,8 +344,11 @@ function print(report, dirs = {}) {
   let bad = 0;
   for (const [target, problems] of Object.entries(report)) {
     if (dirs[target]) {
-      const { total, initial } = buildWeights(dirs[target]);
-      console.log(`${target}: ${(total / 1e6).toFixed(2)} MB total, ${(initial / 1e6).toFixed(2)} MB before the title`);
+      const { total, initial, firstStage } = buildWeights(dirs[target]);
+      console.log(
+        `${target}: ${(total / 1e6).toFixed(2)} MB total, ${(initial / 1e6).toFixed(2)} MB before the title, ` +
+          `${(firstStage / 1e6).toFixed(2)} MB more for the first stage`,
+      );
     }
     if (problems.length === 0) console.log(`${target}: ok`);
     for (const p of problems) console.error(`${target}: ${p}`);

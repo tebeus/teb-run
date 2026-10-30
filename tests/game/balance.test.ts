@@ -4,7 +4,8 @@ import { REAL_GRAPH } from '../../src/game/stages';
 import {
   carryAfterCheckpoint,
   LEVEL_TIME_LIMITS,
-  STAGE_CARRY_GRACE,
+  STAGE_EXTRA_TIME,
+  NO_EXTRA_TIME,
   STAGE_TIME_LIMITS,
   STAGE_TIME_LIMITS_HARD,
 } from '../../src/game/timer';
@@ -52,8 +53,13 @@ const MIN_MARGIN = 3;
  * 15,2 / 18,0 / 19,9 s**. Il tetto sale a 21 s (il misurato più ~1 s),
  * così resta la rete contro un NORMAL ancora più largo senza volerlo; la
  * prova che NORMAL perdona due incidenti è in `balance-error.test.ts`.
+ *
+ * Poi la 0-0 di NORMAL a 110 s con 15 dei 30 s in più riportati (spec
+ * telefono e finali §0, decisione di Teb): l'esperto arriva alla 1-0 con
+ * 15 s in più, che il riporto porta a ogni tappa. Misurato **24,5 / 26,9 /
+ * 30,2 / 33,0 / 34,9 s**; il tetto sale a 36 (il misurato più ~1 s).
  */
-const MAX_MARGIN = 21;
+const MAX_MARGIN = 36;
 /**
  * HARD (collaudo utente: due livelli di difficoltà) ha la sua tabella,
  * `STAGE_TIME_LIMITS_HARD`, tarata perché l'esperto arrivi a ogni
@@ -85,17 +91,16 @@ const prudentRun = memo((route) => driveRoute(route));
 
 /**
  * Margine peggiore per livello sui 16 percorsi, letto sul tempo **riportato**:
- * la grazia della 0-0 di NORMAL (110 s, 30 dei quali non si riportano, spec
- * prima tappa e ritorno §3.2) è per i principianti e non entra nella rete
- * contro il «troppo facile». Con `CARRY_FIRST_STAGE_EXTRA` falso il livello 0
- * misura come al lancio (9,5 s).
+ * dei 30 s in più della 0-0 di NORMAL (spec prima tappa e ritorno §3.2) se
+ * ne riportano solo `FIRST_STAGE_EXTRA_CARRY_S` (spec telefono e finali §0),
+ * e solo quelli entrano nella rete contro il «troppo facile».
  */
 function worstByLevel(runOf: (route: readonly ('L' | 'R')[]) => RouteRun, mode: 'NORMAL' | 'HARD'): number[] {
   const worst = LEVEL_TIME_LIMITS.map(() => Number.POSITIVE_INFINITY);
   for (const route of allRoutes()) {
     for (const m of runOf(route).margins) {
-      const grace = mode === 'NORMAL' ? (STAGE_CARRY_GRACE[m.id] ?? 0) : 0;
-      const carried = carryAfterCheckpoint(m.margin, grace);
+      const extra = mode === 'NORMAL' ? (STAGE_EXTRA_TIME[m.id] ?? NO_EXTRA_TIME) : NO_EXTRA_TIME;
+      const carried = carryAfterCheckpoint(m.margin, extra);
       if (carried < worst[m.level]) worst[m.level] = carried;
     }
   }

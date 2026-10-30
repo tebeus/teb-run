@@ -21,7 +21,7 @@ import type { TiltControl } from '../core/tilt';
 import type { Actions } from '../types';
 import type { ScreenName } from './fsm';
 import { inside, touchRect, type Rect } from './rect';
-import { DAILY_RECT } from './titleLayout';
+import { DAILY_RECT, ENDINGS_RECT } from './titleLayout';
 import {
   MOTION_BLOCKED_LINES,
   MOTION_BLOCKED_SECONDS,
@@ -145,6 +145,7 @@ export function touchLayout(screen: ScreenName, opts: LayoutOptions): TouchButto
       // pulsante lo disegna il titolo, che sa se c'è).
       return [
         { id: 'daily', rect: DAILY_RECT, action: 'daily', kind: 'tap', hidden: true },
+        { id: 'endings', rect: ENDINGS_RECT, action: 'endings', kind: 'tap', hidden: true },
         { id: 'start', rect: r(0, 0, LOGICAL_W, 630), action: 'confirm', kind: 'tap', hidden: true },
       ];
     case 'radio': {

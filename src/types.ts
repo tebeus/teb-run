@@ -182,6 +182,11 @@ export interface Actions {
    * il mouse col clic sul pulsante. Opzionale, come `pause`.
    */
   daily?: boolean;
+  /**
+   * La voce ENDINGS del titolo, toccata col dito (`ui/touch.ts`): vero solo
+   * nel tick del tocco. Opzionale, come `daily`.
+   */
+  endings?: boolean;
 }
 
 export type Gear = 'lo' | 'hi';
@@ -231,11 +236,11 @@ export interface StageDef {
   /** Secondi. */
   timeLimit: number;
   /**
-   * Secondi di `timeLimit` che valgono solo in questa tappa e non si
-   * riportano (`STAGE_CARRY_GRACE` in `game/timer.ts`): la 0-0 di NORMAL.
-   * Assente vale zero.
+   * Secondi in più dentro `timeLimit`, e quanti se ne riportano
+   * (`STAGE_EXTRA_TIME` in `game/timer.ts`): la 0-0 di NORMAL. Assente:
+   * nessuno.
    */
-  carryGrace?: number;
+  extraTime?: { seconds: number; carried: number };
   seed: number;
   /** 0..1. */
   difficulty: number;

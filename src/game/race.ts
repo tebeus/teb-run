@@ -38,7 +38,7 @@ import {
   carryOver,
   CHECKPOINT_BANNER_S,
   expiredSpeed,
-  graceOf,
+  extraOf,
   initialTimer,
   stepBannerClock,
   stepTimer,
@@ -534,9 +534,9 @@ export function createFullRace(opts: FullRaceOptions): RaceEngine {
           events.push({ type: 'finish', ending: graph.endingOf(stage), score: Math.round(score) });
           return events;
         }
-        // La grazia della tappa (la 0-0 di NORMAL) non si riporta e non
-        // fa bonus: chi guida bene arriva alla 1-0 come al lancio.
-        const carried = carryAfterCheckpoint(timer.left, graceOf(stage));
+        // Dei secondi in più della tappa (la 0-0 di NORMAL) se ne
+        // riportano solo alcuni; il resto non passa e non fa bonus.
+        const carried = carryAfterCheckpoint(timer.left, extraOf(stage));
         const bonus = checkpointBonus(carried);
         score += bonus;
         extendTime = next.timeLimit;

@@ -1,10 +1,17 @@
-// Caricamento a fasi degli sprite (lancio, punto 12). All'avvio arriva solo
-// ciò che serve a caricamento, titolo, radio e prima tappa con l'auto scelta;
-// il resto arriva in background, nell'ordine in cui il gioco lo chiederà.
+// Caricamento a fasi degli sprite (lancio, punto 12; spec telefono e finali
+// §B.2). Tre fasi:
+// - 0, prima del titolo: solo titolo e radio (`TITLE_SPRITES` e le
+//   anteprime delle auto);
+// - 1, mentre il giocatore è su titolo e radio: la prima tappa con l'auto
+//   scelta, cioè il suo tema e gli sprite condivisi che disegna davvero
+//   (`FIRST_STAGE_SPRITES`, generato da un test), più gli effetti;
+// - 2, il resto, in background nell'ordine in cui il gioco lo chiederà.
 //
-// Le regole stanno sui nomi dei file del manifest (le chiavi), in un modulo
-// senza import di valori: lo leggono sia `core/assets.ts` sia
-// `tools/check-builds.mjs`, che misura la fase iniziale della build.
+// Le regole stanno sui nomi dei file del manifest (le chiavi), in moduli
+// senza import di valori: li leggono sia `core/assets.ts` sia
+// `tools/check-builds.mjs`, che misura le fasi della build.
+
+import { FIRST_STAGE_SPRITES } from './firstStageSprites.ts';
 
 /** I cinque temi delle tappe (`ThemeId` di types.ts). */
 export const PHASE_THEMES = ['beach', 'desert', 'alpine', 'farm', 'town'] as const;
@@ -54,12 +61,28 @@ export interface StageNeed {
   theme: string;
 }
 
+/** Gli sprite condivisi di titolo e radio: la fase 0, con le anteprime delle auto. */
+export const TITLE_SPRITES: readonly string[] = ['screen_attract', 'title_logo', 'menu_cursor', 'radio_panel', 'radio_track_icons'];
+
+const FIRST_STAGE_SHARED = new Set(FIRST_STAGE_SPRITES);
+
+/**
+ * Vero se il file condiviso `key` serve alla tappa `stage`. Per la prima
+ * tappa sono quelli che disegna davvero, più gli effetti (`fx_*`: un urto
+ * può capitare ovunque); per le altre, per prudenza, tutti: quando ci si
+ * arriva il background li ha già portati. Pura.
+ */
+function sharedNeededFor(key: string, stage: StageNeed): boolean {
+  if (stage.id !== FIRST_STAGE.id) return true;
+  return FIRST_STAGE_SHARED.has(key) || key.startsWith('fx_');
+}
+
 /** Vero se il file `key` serve a guidare la tappa `stage` con l'auto `car`. Pura. */
 export function neededFor(key: string, stage: StageNeed, car: string): boolean {
   const g = groupOf(key);
   switch (g.kind) {
     case 'shared':
-      return true;
+      return sharedNeededFor(key, stage);
     case 'theme':
       return g.theme === stage.theme;
     case 'stage':
@@ -71,14 +94,24 @@ export function neededFor(key: string, stage: StageNeed, car: string): boolean {
   }
 }
 
+/** Una fase del caricamento: 0 prima del titolo, 1 la prima tappa, 2 il resto. */
+export type LoadPhase = 0 | 1 | 2;
+
 /**
- * Vero se il file `key` è della fase iniziale: tutto ciò che serve alla
- * prima tappa con l'auto scelta, più il frame dritto di ogni auto (la radio
- * li mostra tutti). Pura.
+ * La fase del file `key`, con la prima tappa `first` e l'auto `car`:
+ * titolo, radio e il frame dritto di ogni auto (la radio li mostra tutti)
+ * nella 0; ciò che serve a guidare la prima tappa nella 1; il resto nella
+ * 2. Pura.
  */
-export function isInitial(key: string, first: StageNeed, car: string): boolean {
+export function phaseOf(key: string, first: StageNeed, car: string): LoadPhase {
   const g = groupOf(key);
-  return neededFor(key, first, car) || (g.kind === 'car' && g.preview);
+  if ((g.kind === 'shared' && TITLE_SPRITES.includes(key)) || (g.kind === 'car' && g.preview)) return 0;
+  return neededFor(key, first, car) ? 1 : 2;
+}
+
+/** Vero se il file `key` va scaricato prima del titolo (fase 0). Pura. */
+export function isInitial(key: string, first: StageNeed, car: string): boolean {
+  return phaseOf(key, first, car) === 0;
 }
 
 /** Livello di un id di tappa (`3-1` → 3); 0 se l'id è malformato. Pura. */

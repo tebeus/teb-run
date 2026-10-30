@@ -1,12 +1,11 @@
 // Telefono in verticale (lancio, punto 14): il gioco è orizzontale. Su un
-// dispositivo touch in verticale si copre tutto con "ROTATE YOUR PHONE", i
-// tocchi non arrivano al gioco e la gara va in pausa da sola, come quando
-// la scheda perde il fuoco. Con tastiera e mouse non succede mai.
+// dispositivo touch in verticale la tela di `portrait.ts` copre tutto con
+// "ROTATE YOUR PHONE" (spec telefono e finali §A), i tocchi non arrivano al
+// gioco e la gara va in pausa da sola, come quando la scheda perde il
+// fuoco. Con tastiera e mouse non succede mai.
 
-import { LOGICAL_H, LOGICAL_W } from '../core/canvas';
 import type { InputDevice } from '../core/device';
 import type { LogicalPoint, SystemSignals } from '../core/signals';
-import { drawTextOutlined } from './text';
 
 /**
  * Oltre questo rapporto altezza/larghezza la finestra è chiaramente
@@ -30,31 +29,9 @@ export function wantsRotate(device: InputDevice, winW: number, winH: number): bo
   return device === 'touch' && winH > winW * ROTATE_ASPECT && winW < ROTATE_MIN_PLAYABLE_W;
 }
 
-/** Il velo con la scritta e un telefono disegnato che si gira. */
-export function drawRotate(ctx: CanvasRenderingContext2D): void {
-  ctx.fillStyle = '#05050f';
-  ctx.fillRect(0, 0, LOGICAL_W, LOGICAL_H);
-  const cx = LOGICAL_W / 2;
-  // Il telefono: in verticale a sinistra, freccia, in orizzontale a destra.
-  const frame = (x: number, y: number, w: number, h: number): void => {
-    ctx.fillStyle = '#ffee55';
-    ctx.fillRect(x, y, w, 10);
-    ctx.fillRect(x, y + h - 10, w, 10);
-    ctx.fillRect(x, y, 10, h);
-    ctx.fillRect(x + w - 10, y, 10, h);
-  };
-  frame(cx - 330, 110, 150, 260);
-  frame(cx + 80, 165, 260, 150);
-  drawTextOutlined(ctx, '>', cx - 70, 200, 10, '#ffffff', 'center');
-  drawTextOutlined(ctx, 'ROTATE YOUR PHONE', cx, 450, 8, '#ffffff', 'center');
-  drawTextOutlined(ctx, 'THE GAME PLAYS IN LANDSCAPE', cx, 560, 4, '#cccccc', 'center');
-}
-
 export interface RotateGuard {
   /** Vero mentre si chiede di ruotare: i controlli touch tacciono. */
   blocked(): boolean;
-  /** Da chiamare per ultimo nel render: copre tutto se serve. */
-  draw(ctx: CanvasRenderingContext2D): void;
 }
 
 /**
@@ -76,9 +53,6 @@ export function createRotateGuard(
   win.addEventListener('resize', () => void check());
   return {
     blocked: check,
-    draw(ctx) {
-      if (check()) drawRotate(ctx);
-    },
   };
 }
 

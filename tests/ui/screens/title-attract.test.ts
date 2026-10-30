@@ -9,6 +9,8 @@ import {
   attractFade,
   attractPhase,
   initialTitleState,
+  shownFade,
+  shownPhase,
   stepTitle,
   TOP_SCORES_SHOWN,
 } from '../../../src/ui/screens/title';
@@ -78,5 +80,26 @@ describe('ciclo attrattivo del titolo (spec §11)', () => {
   test('ENTER still goes to the radio at once', () => {
     const r = stepTitle(initialTitleState(), 1 / 60, { ...emptyActions(), confirm: true });
     expect(r.transition?.to).toBe('radio');
+  });
+});
+
+describe('attract phases wait for their sprites (spec telefono e finali §B.2)', () => {
+  const none = { stage: false, map: false };
+  const all = { stage: true, map: true };
+
+  test('the demo shows only with the first stage ready, the map only with map_full', () => {
+    expect(shownPhase('demo', all)).toBe('demo');
+    expect(shownPhase('demo', none)).toBe('title');
+    expect(shownPhase('map', { stage: true, map: false })).toBe('title');
+    expect(shownPhase('map', all)).toBe('map');
+    expect(shownPhase('title', none)).toBe('title');
+  });
+
+  test('no fade to black from the title to the title', () => {
+    const t = ATTRACT_PHASE_S + 0.1;
+    expect(shownFade(t, all)).toBeLessThan(1);
+    expect(shownFade(t, none)).toBe(1);
+    expect(shownFade(2 * ATTRACT_PHASE_S + 0.1, { stage: true, map: false })).toBeLessThan(1);
+    expect(shownFade(0.1, none)).toBeLessThan(1);
   });
 });

@@ -20,11 +20,16 @@ import { createFullRace, createRace } from './game/race';
 import { REAL_GRAPH, STAGES } from './game/stages';
 import { createDefaultCarSetting } from './persist/car';
 import { createDefaultModeSetting } from './persist/mode';
-import { createDefaultScoresStore } from './persist/scores';
+import { createDefaultScoresStore, createScoresStore, scoresKeyFor } from './persist/scores';
+import { createEndingsStore } from './persist/endings';
+import { MODES } from './game/mode';
 import { createDailyStore, createInitialsMemory, defaultStorage } from './persist/daily';
 import { createStreakStore } from './persist/streak';
 import { dailyGraph } from './game/daily';
-import { createDailySession, sessionCar, sessionMode } from './ui/dailySession';
+import { challengeLabel, createDailySession, sessionCar, sessionMode } from './ui/dailySession';
+import { titleDailyLine } from './ui/dailyLine';
+import { dailyChallenge, dailyKey } from './shared/daily';
+import { startPortrait } from './ui/portrait';
 import { createDefaultTiltSeenSetting, createDefaultTiltSetting } from './persist/tilt';
 import { renderWorld } from './render/world';
 import { createApp } from './ui/app';
@@ -95,6 +100,19 @@ export const DEBUG_HASH = '#debug';
 /** Il gancio è acceso adesso? Nelle build site e portal mai. */
 const debugOn = (): boolean => debugHookOn(FEATURES, window.location.hash, DEBUG_HASH);
 
+/**
+ * `performance.mark('teb-stage-wait-start'|'-end')` e `data-stage-wait` sul
+ * documento: la gara aspetta gli sprite della tappa (e2e in rete lenta).
+ */
+function markStageWait(waiting: boolean): void {
+  try {
+    performance.mark(waiting ? 'teb-stage-wait-start' : 'teb-stage-wait-end');
+  } catch {
+    // Resource Timing assente: resta l'attributo
+  }
+  document.documentElement.dataset.stageWait = waiting ? 'on' : 'off';
+}
+
 /** `performance.mark('teb-assets-<phase>')` e `data-assets` sul documento. */
 function markAssetPhase(phase: 'initial' | 'all'): void {
   try {
@@ -140,6 +158,11 @@ async function main(): Promise<void> {
   const storage = defaultStorage();
   const dailyStore = createDailyStore(storage);
   const streak = createStreakStore(storage);
+  // La collezione dei finali (spec telefono e finali §C): le tappe delle
+  // partite di prima si prendono una volta dalle TOP 10 di NORMAL e HARD.
+  const endings = createEndingsStore(storage, () =>
+    MODES.flatMap((m) => (storage === undefined ? [] : createScoresStore(storage, scoresKeyFor(m)).load())),
+  );
   const initials = createInitialsMemory(storage);
   // La classifica mondiale (spec classifica e sfida, §2.7): nella build site
   // verso api.tebrun.io; nella privata solo con `?board=local`, verso
@@ -175,9 +198,29 @@ async function main(): Promise<void> {
   // L'AudioContext vuole un gesto utente (Safari, iOS al primo tocco): vedi core/audioUnlock.
   installAudioUnlock(window, () => audio.unlock());
 
+  // Telefono in verticale (spec telefono e finali §A): una tela a parte,
+  // sopra il gioco, con l'illustrazione del titolo, l'invito a girare il
+  // telefono, la sfida di oggi e la barra finché il titolo non è pronto.
+  let titleReady = false;
+  const portrait = document.getElementById('portrait') as HTMLCanvasElement | null;
+  if (portrait !== null) {
+    startPortrait({ canvas: portrait, win: window, raf: (cb) => requestAnimationFrame(cb) }, rotate.blocked, (t) => {
+      const now = new Date();
+      const today = dailyKey(now);
+      return {
+        t,
+        progress: titleReady ? null : assets.progress(),
+        attract: assets.isLoaded('screen_attract') ? assets.get('screen_attract') : null,
+        logo: assets.isLoaded('title_logo') ? assets.get('title_logo') : null,
+        daily: { label: challengeLabel(dailyChallenge(today)), line: titleDailyLine(now, streak.current(today)) },
+      };
+    });
+  }
+
   // Schermata di caricamento, subito, fino a quando gli sprite sono pronti.
   const stopLoading = startLoadingScreen(ctx, assets);
   await assets.ready;
+  titleReady = true;
   stopLoading();
   if (SDK_BUILD) PORTAL_SDK.loading(false);
   // Segni per chi misura (e2e/weight.spec.ts): fine della fase iniziale e
@@ -218,6 +261,7 @@ async function main(): Promise<void> {
     daily,
     dailyStore,
     streak,
+    endings,
     initials,
     ...(board === undefined ? {} : { board }),
     ...(SDK_BUILD ? { inputLocked: () => GAMEPLAY.adRunning() } : {}),
@@ -250,6 +294,7 @@ async function main(): Promise<void> {
     attractFactory: (stage, a) => createRace(stage, a),
     renderWorld,
     firstStage: graph.first(),
+    markStageWait,
   });
 
   // Solo con #debug (e solo nella build privata): riferimenti in sola lettura per i test end to end, che
@@ -313,7 +358,6 @@ async function main(): Promise<void> {
       launchUi.draw(ctx);
       shareUi.draw(ctx);
       touch.draw(ctx);
-      rotate.draw(ctx);
     },
   }).start();
 }

@@ -162,27 +162,28 @@ export function driveBeginner(profile: BeginnerProfile, options: BeginnerOptions
   };
 }
 
-/** Il grafo `graph` con la 0-0 di NORMAL com'era al lancio: 80 s, senza grazia. */
+/** Il grafo `graph` con la 0-0 di NORMAL com'era al lancio: 80 s, senza secondi in più. */
 export function launchGraph(graph: StageGraph = REAL_GRAPH): StageGraph {
   return {
     ...graph,
     first: () => {
-      const { carryGrace: _, ...stage } = graph.first();
+      const { extraTime: _, ...stage } = graph.first();
       return { ...stage, timeLimit: 80 };
     },
   };
 }
 
 /**
- * Il grafo `graph` con i secondi in più della 0-0 **riportati** (la variante
- * di `CARRY_FIRST_STAGE_EXTRA` vero): 110 s, nessuna grazia.
+ * Il grafo `graph` con la 0-0 a 110 s e `carried` dei 30 s in più
+ * riportabili (`FIRST_STAGE_EXTRA_CARRY_S` = `carried`): per misurare le
+ * varianti senza toccare la costante. 30 = tutti, 0 = nessuno.
  */
-export function carryAllGraph(graph: StageGraph = REAL_GRAPH): StageGraph {
+export function extraCarryGraph(carried: number, graph: StageGraph = REAL_GRAPH): StageGraph {
   return {
     ...graph,
     first: () => {
-      const { carryGrace: _, ...stage } = graph.first();
-      return stage;
+      const stage = graph.first();
+      return { ...stage, extraTime: { seconds: 30, carried } };
     },
   };
 }

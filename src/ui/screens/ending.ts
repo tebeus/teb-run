@@ -12,6 +12,7 @@ import { SDK_BUILD } from '../../core/target';
 import { drawContinueButton, drawRetryMenu, initialRetryMenu, RETRY_ROW_TOP, type RetryMenuState } from '../retryMenu';
 import { enterEndOfGame, retryTarget } from '../endOfGame';
 import { gameOverLines, nameEntryPayload, stepEndOfGame } from './gameOver';
+import { endingsCount } from './endings';
 
 export const ENDING_DURATION_S = 8;
 /**
@@ -25,6 +26,15 @@ export const ENDING_GOAL_Y = 36;
 export const ENDING_CONGRATS_Y = 96;
 /** Quota minima del titolo che scorre: la sua banda (-30) parte sotto l'intestazione. */
 export const ENDING_SCROLL_MIN_Y = 150;
+/** `NEW ENDING! 3 / 5` (spec telefono e finali §C): in alto a sinistra, accanto a GOAL!, lampeggiante. */
+export const NEW_ENDING_X = 24;
+export const NEW_ENDING_Y = 44;
+export const NEW_ENDING_BLINK_S = 0.5;
+
+/** `NEW ENDING! 3 / 5`. Pura. */
+export function newEndingLine(count: number): string {
+  return `NEW ENDING! ${endingsCount(count)}`;
+}
 
 type EndingPayload = ScreenPayloads['ending'];
 
@@ -121,10 +131,14 @@ export function createEndingScreen(deps: ScreenDeps): Screen {
   /** In DAILY, sopra la tappa: `NEW CHALLENGE IN 5H 12M`. */
   let nextLine: string | null = null;
   const retryTo = retryTarget(deps);
+  /** Quanti finali dopo questo, se è nuovo; null se era già stato visto. */
+  let newEnding: number | null = null;
 
   return {
     enter(payload) {
       const parsed = parseEndingPayload(payload, deps.firstStage);
+      const fresh = deps.endings?.recordEnding(parsed.ending);
+      newEnding = fresh?.isNew === true ? fresh.count : null;
       // La festa del portale: un finale, record o no (una volta sola), quindi
       // `enterEndOfGame` non ne fa un'altra.
       const end = enterEndOfGame(deps, parsed, true);
@@ -181,6 +195,9 @@ export function createEndingScreen(deps: ScreenDeps): Screen {
       // Prima del testo che scorre: si è arrivati, qualunque sia il finale.
       drawTextOutlined(ctx, 'GOAL!', LOGICAL_W / 2, ENDING_GOAL_Y, 6, '#ffee55', 'center');
       drawTextOutlined(ctx, 'CONGRATULATIONS', LOGICAL_W / 2, ENDING_CONGRATS_Y, 3, '#ffffff', 'center');
+      if (newEnding !== null && Math.floor(state.t / NEW_ENDING_BLINK_S) % 2 === 0) {
+        drawTextOutlined(ctx, newEndingLine(newEnding), NEW_ENDING_X, NEW_ENDING_Y, 3, '#ffee55', 'left');
+      }
 
       // Banda scura translucida dietro il testo che scorre: senza, il bianco
       // pieno perde leggibilità sul cielo chiaro del finale 4 e sul tramonto

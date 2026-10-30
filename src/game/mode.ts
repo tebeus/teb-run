@@ -49,12 +49,12 @@ export function modeLabel(mode: Difficulty): string {
 /**
  * La tappa nella modalità `mode`: NORMAL la lascia com'è (i suoi tempi sono
  * già quelli della tabella di sempre), HARD la marca e le dà il limite di
- * `STAGE_TIME_LIMITS_HARD`, se c'è, senza grazia (`carryGrace`). Pura.
+ * `STAGE_TIME_LIMITS_HARD`, se c'è, senza i secondi in più (`extraTime`). Pura.
  */
 export function withMode(stage: StageDef, mode: Difficulty): StageDef {
   if (mode === 'normal') return stage;
-  // HARD non ha la grazia della 0-0 di NORMAL: i suoi tempi sono quelli del lancio.
-  const { carryGrace: _, ...rest } = stage;
+  // HARD non ha i secondi in più della 0-0 di NORMAL: i suoi tempi sono quelli del lancio.
+  const { extraTime: _, ...rest } = stage;
   return { ...rest, mode, timeLimit: STAGE_TIME_LIMITS_HARD[stage.id] ?? stage.timeLimit };
 }
 

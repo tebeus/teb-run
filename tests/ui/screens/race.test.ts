@@ -13,6 +13,10 @@ import {
   STAGE_WAIT_S,
 } from '../../../src/ui/screens/race';
 import { go } from '../../../src/ui/fsm';
+import { LOADING_BAR_H, LOADING_BAR_W, LOADING_BAR_Y } from '../../../src/ui/loading';
+import { createRecordCtx } from '../../helpers/recordCtx';
+
+const LOADING_BAR_X = (1280 - LOADING_BAR_W) / 2;
 import type { ScreenDeps } from '../../../src/ui/deps';
 import type { AudioBus, RaceEngine, RaceEvent, RaceSnapshot, StageDef } from '../../../src/types';
 
@@ -466,7 +470,32 @@ describe('createRaceScreen with assets in phases (launch, point 12)', () => {
     expect(asked.slice(-2)).toEqual(['3-1/retro', '3-2/retro']);
   });
 
-  test('it waits at most STAGE_WAIT_S seconds, then drives with the fallbacks', () => {
+  test('while it waits it draws the loading bar of the stage, not the road with the fallbacks', () => {
+    let worlds = 0;
+    const engine: RaceEngine = { update: () => [], snapshot: () => baseSnapshot({ stage: { ...stage, id: '2-1', theme: 'alpine' } }) };
+    const assets = Object.assign(createEmptyAssets(), {
+      requestStage: () => false,
+      stageProgress: () => ({ done: 3, total: 12 }),
+    });
+    const screen = createRaceScreen({
+      assets,
+      audio: baseAudio(),
+      scores: createScoresStore(),
+      raceFactory: () => engine,
+      renderWorld: () => void worlds++,
+      firstStage: stage,
+    });
+    screen.enter({ song: 0 });
+    screen.update(1 / 60, emptyActions());
+    const rec = createRecordCtx();
+    screen.render(rec.ctx);
+    expect(worlds).toBe(0);
+    // La barra di `drawLoadingScreen`, piena per 3 file su 12.
+    expect(rec.fills().some((op) => op.args.join() === [LOADING_BAR_X, LOADING_BAR_Y, 160, LOADING_BAR_H].join())).toBe(true);
+  });
+
+  test('it waits at most STAGE_WAIT_S seconds (a network hung for a minute), then drives with the fallbacks', () => {
+    expect(STAGE_WAIT_S).toBe(60);
     const { screen, updates } = setup(new Set());
     for (let i = 0; i < STAGE_WAIT_S * 60 + 2; i++) screen.update(1 / 60, emptyActions());
     expect(updates()).toBeGreaterThan(0);

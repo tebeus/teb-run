@@ -8,6 +8,7 @@ import type { ScreenDeps } from '../deps';
 import { go, type Screen, type ScreenPayloads, type Transition } from '../fsm';
 import { drawGoalLine, drawRaceHint, goalLineAlpha, raceHintAlpha } from '../controlsHelp';
 import { closedPause, drawPause, openPause, stepPause, wantsPause, type PauseState } from '../pause';
+import { drawLoadingScreen } from '../loading';
 import { drawTextOutlined } from '../text';
 import { drawGearHint, gearHintVisible, initialGearHint, stepGearHint } from '../gearHint';
 import { LOGICAL_H, LOGICAL_W } from '../../core/canvas';
@@ -138,10 +139,13 @@ export function rumbleFor(snapshot: RaceSnapshot, speedPercent: number): boolean
 
 /**
  * Quanto aspetta al più, in secondi, una tappa che parte prima che i suoi
- * sprite siano arrivati dal background (lancio, punto 12): poi si guida
- * comunque, con i ripieghi procedurali al posto di ciò che manca.
+ * sprite siano arrivati dal background (lancio, punto 12). Era 3: dopo si
+ * guidava coi ripieghi procedurali, cioè una tappa senza la sua grafica.
+ * Ora si aspetta che la tappa sia pronta, con la barra (spec telefono e
+ * finali §B.2): un file fallito conta come risolto, quindi l'attesa finisce
+ * anche senza rete. Il tetto resta solo contro una rete appesa per minuti.
  */
-export const STAGE_WAIT_S = 3;
+export const STAGE_WAIT_S = 60;
 
 /**
  * Chiede allo store la tappa `stage` con l'auto `car` e, in testa alla
@@ -161,9 +165,13 @@ export function stageAssetsSettled(assets: ScreenDeps['assets'], stage: { id: st
   return settled;
 }
 
-/** Scritta sopra la strada ferma mentre si aspettano gli sprite della tappa. */
-function drawStageWait(ctx: CanvasRenderingContext2D): void {
-  drawTextOutlined(ctx, 'LOADING', LOGICAL_W / 2, LOGICAL_H / 2 - 120, 4, '#ffee55', 'center');
+/**
+ * L'attesa degli sprite della tappa: la schermata di caricamento, col logo
+ * e la barra dei file della tappa, al posto della strada coi ripieghi.
+ */
+function drawStageWait(ctx: CanvasRenderingContext2D, assets: ScreenDeps['assets'], stage: { id: string; theme: string }, car: string): void {
+  const progress = stagedOf(assets)?.stageProgress?.(stage, car) ?? { done: 0, total: 1 };
+  drawLoadingScreen(ctx, progress, assets.get('title_logo'));
 }
 
 export function createRaceScreen(deps: ScreenDeps): Screen {
@@ -308,10 +316,12 @@ export function createRaceScreen(deps: ScreenDeps): Screen {
       if (stage !== undefined && stage.id !== checkedStage) {
         const settled = stageAssetsSettled(deps.assets, stage, deps.car?.get() ?? 'new');
         if (!settled && waitT < STAGE_WAIT_S) {
+          if (!waiting) deps.markStageWait?.(true);
           waitT += dt;
           waiting = true;
           return null;
         }
+        if (waiting) deps.markStageWait?.(false);
         checkedStage = stage.id;
         waitT = 0;
         waiting = false;
@@ -351,6 +361,10 @@ export function createRaceScreen(deps: ScreenDeps): Screen {
     },
     render(ctx) {
       if (!engine || !snapshot) return;
+      if (waiting && !pause.open) {
+        drawStageWait(ctx, deps.assets, snapshot.stage, deps.car?.get() ?? 'new');
+        return;
+      }
       deps.renderWorld(ctx, snapshot, deps.assets, particles, { trail, birds, car: deps.car?.get() });
       renderHud(ctx, snapshot, deps.assets, {
         muted: deps.audio.muted,
@@ -358,7 +372,6 @@ export function createRaceScreen(deps: ScreenDeps): Screen {
         paused: pause.open,
       });
       const device = deps.device?.() ?? 'keyboard';
-      if (waiting && !pause.open) drawStageWait(ctx);
       // Con il menu aperto il suggerimento dei comandi, come il semaforo
       // nell'HUD, non si disegna: cadrebbe sotto i pulsanti. Il suo tempo è
       // fermo, quindi a CONTINUE riappare dov'era.

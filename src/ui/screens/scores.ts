@@ -6,7 +6,9 @@ import type { ScreenDeps } from '../deps';
 import { go, type Screen, type ScreenPayloads, type Transition } from '../fsm';
 import { stageNumber } from '../shareCard';
 import { drawText } from '../text';
-import { drawRetryMenu, initialRetryMenu, stepRetryMenu, type RetryMenuState } from '../retryMenu';
+import { drawMenuButton, drawRetryMenu, initialRetryMenu, stepRetryMenu, type RetryMenuState } from '../retryMenu';
+import { inside, type Rect } from '../rect';
+import type { InputDevice } from '../../core/device';
 import { cyclePage, drawTabs, PAGE_LABELS, SCORES_PAGES, tabAt, type ScoresPage } from '../scoresPages';
 import { retryTarget } from '../endOfGame';
 import { challengeLabel } from '../dailySession';
@@ -15,6 +17,23 @@ import type { SubmitResult } from '../../net/types';
 import type { Difficulty } from '../../types';
 
 export const SCORES_DURATION_S = 8;
+
+/**
+ * La voce ENDINGS della TOP 10 (spec telefono e finali §C): in basso a
+ * destra, dopo MENU quando c'è RETRY, prima dello schermo intero.
+ */
+export const SCORES_ENDINGS_RECT: Rect = { x: 960, y: 612, w: 230, h: 84 };
+
+/** Il tasto della voce ENDINGS, sopra il pulsante: C (o Shift) e Y del pad, come l'auto sulla radio. Pura. */
+export function scoresEndingsKey(device: InputDevice): string | null {
+  if (device === 'touch') return null;
+  return device === 'pad' ? 'Y' : 'C OR CLICK';
+}
+
+/** Si va alla pagina ENDINGS? Il tasto dell'auto (C, Shift, Y), o un tocco o un clic sul pulsante. Pura. */
+export function wantsEndings(actions: Actions, tap: { x: number; y: number } | null): boolean {
+  return actions.gearToggle || (tap !== null && inside(SCORES_ENDINGS_RECT, tap.x, tap.y));
+}
 
 /**
  * Colonne della riga, in x logiche. Stanno in 1280 con il caso peggiore:
@@ -149,7 +168,9 @@ export function createScoresScreen(deps: ScreenDeps): Screen {
     },
     update(dt, actions) {
       // Il clic del mouse arriva anche come tocco (`takeTap`, ogni puntatore): una volta sola.
-      const r = stepScores(state, dt, { ...actions, click: null }, deps.signals?.takeTap() ?? null, pages(), retryTo);
+      const tap = deps.signals?.takeTap() ?? null;
+      if (wantsEndings(actions, tap ?? actions.click ?? null)) return go('endings', undefined);
+      const r = stepScores(state, dt, { ...actions, click: null }, tap, pages(), retryTo);
       state = r.state;
       return r.transition;
     },
@@ -206,6 +227,9 @@ export function createScoresScreen(deps: ScreenDeps): Screen {
       if (result !== null) drawText(ctx, rankLine(result), LOGICAL_W / 2, 580, 3, '#66ff66', 'center');
       if (tabs && (deps.device?.() ?? 'keyboard') !== 'touch') drawText(ctx, 'UP DOWN: PAGE', LOGICAL_W - 20, 84, 1, '#888888', 'right');
       if (state.retry !== undefined) drawRetryMenu(ctx, state.retry.menu, deps.device?.() ?? 'keyboard');
+      drawMenuButton(ctx, SCORES_ENDINGS_RECT, 'ENDINGS', 3, false);
+      const key = scoresEndingsKey(deps.device?.() ?? 'keyboard');
+      if (key !== null) drawText(ctx, key, SCORES_ENDINGS_RECT.x + SCORES_ENDINGS_RECT.w / 2, SCORES_ENDINGS_RECT.y - 20, 1, '#888888', 'center');
     },
   };
 }
