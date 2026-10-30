@@ -42,9 +42,13 @@ for (const [name, slug] of [['iPhone SE', 'iphone-se'], ['iPhone 13', 'iphone-13
       await page.screenshot({ path: `${REPORT}/portrait-title-${slug}.png` });
       const box = (await portrait.boundingBox())!;
       const vp = page.viewportSize()!;
-      // La tela 9:16, grande quanto la finestra permette.
-      expect(box.width).toBeCloseTo(portraitBox(vp.width, vp.height).width, 0);
-      expect(box.width).toBeGreaterThan(vp.width * 0.9);
+      // La tela copre tutta la finestra: ai lati del disegno 9:16 non si vede il gioco sotto.
+      expect(box.width).toBeCloseTo(vp.width, 0);
+      expect(box.height).toBeCloseTo(vp.height, 0);
+      const inner = portraitBox(vp.width, vp.height);
+      for (const x of [1, inner.left - 1, vp.width - 2]) {
+        expect(await page.evaluate(([px, py]) => document.elementFromPoint(px, py)?.id, [Math.max(1, x), vp.height / 2])).toBe('portrait');
+      }
 
       // Un tocco in verticale non arriva al gioco.
       await page.touchscreen.tap(vp.width / 2, vp.height / 2);

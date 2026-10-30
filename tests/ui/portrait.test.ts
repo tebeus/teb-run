@@ -95,7 +95,10 @@ describe('tela del telefono in verticale (spec telefono e finali §A)', () => {
     expect(canvas.width).toBe(PORTRAIT_W);
     pending!(0);
     expect(style.display).toBe('block');
+    // La tela copre tutta la finestra: niente strisce del gioco ai lati.
     expect(style.width).toBe('375px');
+    expect(style.height).toBe('667px');
+    expect(style.left).toBe('0px');
     expect(frames).toBe(1);
     wanted = false;
     pending!(16);

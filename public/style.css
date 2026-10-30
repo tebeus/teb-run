@@ -26,4 +26,10 @@ html, body, canvas {
 canvas { max-width: 100vw; max-height: 100vh; }
 /* Telefono in verticale (src/ui/portrait.ts): sopra il gioco, nascosta
    finché il gioco non la mostra; prende lei i tocchi. */
-#portrait { display: none; z-index: 1; }
+#portrait {
+  display: none;
+  z-index: 1;
+  /* A tutta finestra: il disegno 9:16 al centro, il resto del colore del suo fondo. */
+  object-fit: contain;
+  background: #05050f;
+}

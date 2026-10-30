@@ -15,6 +15,7 @@ import {
   hitUrl,
   referrerOrigin,
   statsHostExcluded,
+  timeBand,
   trackRace,
   type StatsEnv,
 } from '../../src/core/stats';
@@ -53,6 +54,7 @@ describe('the event table', () => {
       STAT_EVENTS.dailyEnd(),
       ...[...STAGES.keys()].map((id) => STAT_EVENTS.gameOver(id)),
       STAT_EVENTS.gearHi(),
+      ...(['0-1m', '1-2m', '2-3m', '3-5m', '5m+'] as const).map((b) => STAT_EVENTS.time(b)),
     ];
     for (const n of names) {
       expect(n, n).toMatch(EVENT_NAME);
@@ -70,7 +72,7 @@ describe('the event table', () => {
   });
 
   test('anything that is not a table name is refused', () => {
-    for (const bad of ['', 'Game/Start', 'name/AAA', 'a/b/c', 'x?y', 'car/new&e=1', 'stage/1 0', 'https://x']) {
+    for (const bad of ['', 'Game/Start', 'name/AAA', 'a/b/c', 'x?y', 'car/new&e=1', 'stage/1 0', 'https://x', 'time/+5m', 'time/5m++']) {
       expect(EVENT_NAME.test(bad), bad).toBe(false);
     }
   });
@@ -85,11 +87,14 @@ describe('the event table', () => {
     expect(eventTitle('gameover/2-1')).toBe('Game over at 2-1');
     expect(eventTitle('gear/hi')).toBe('High gear');
     expect(eventTitle('car/new')).toBe('Car new');
+    expect(eventTitle('time/2-3m')).toBe('Played 2-3m');
   });
 
   test('the README documents every kind of event', () => {
     const readme = readFileSync(fileURLToPath(new URL('../../README.md', import.meta.url)), 'utf8');
-    for (const n of ['game/start', 'stage/', 'fork/', 'ending/', '`share`', 'mode/', 'car/']) expect(readme, n).toContain(n);
+    for (const n of ['game/start', 'stage/', 'fork/', 'ending/', '`share`', 'mode/', 'car/', 'gameover/', 'gear/hi', 'time/']) {
+      expect(readme, n).toContain(n);
+    }
   });
 });
 
@@ -237,6 +242,7 @@ describe('trackRace', () => {
       'fork/3-2-L',
       'stage/4-2',
       'ending/3',
+      'time/0-1m',
     ]);
     expect(e.sent.join(' ')).not.toContain('123456');
   });
@@ -319,8 +325,41 @@ describe('trackRace', () => {
     expect(e.sent.map((u) => params(u).p)).not.toContain('gear/hi');
   });
 
+  test('time/<band> once per game: at the game over or the finish, or when the race closes before (QUIT, RESTART)', () => {
+    expect([0, 59.9, 60, 119, 120, 179.9, 180, 299, 300, 900].map(timeBand)).toEqual([
+      '0-1m', '0-1m', '1-2m', '1-2m', '2-3m', '2-3m', '3-5m', '3-5m', '5m+', '5m+',
+    ]);
+    const timed = (script: RaceEvent[][], elapsed: number): RaceEngine => {
+      let i = 0;
+      return { update: () => script[i++] ?? [], snapshot: () => ({ elapsed }) as RaceSnapshot };
+    };
+    const over: RaceEvent = { type: 'gameover', score: 1, stage: stage('1-1') };
+    for (const [script, elapsed, band] of [
+      [[[], [over], [over]], 112, '1-2m'],
+      [[[{ type: 'finish', ending: 1, score: 1 }]], 386, '5m+'],
+      [[[]], 30, '0-1m'],
+    ] as const) {
+      const e = env();
+      const s = createStats(true, STATS_ENDPOINT, e);
+      s.startGame('normal', 'new');
+      const race = trackRace(timed(script as unknown as RaceEvent[][], elapsed), s, '0-0');
+      for (let k = 0; k < 4; k++) race.update(1 / 60, {} as never);
+      race.close?.();
+      race.close?.();
+      expect(e.sent.map((u) => params(u).p).filter((p) => p.startsWith('time/'))).toEqual([`time/${band}`]);
+    }
+  });
+
   test('with stats off the engine is returned untouched', () => {
     const engine = fake([]);
     expect(trackRace(engine, NO_STATS, '0-0')).toBe(engine);
+  });
+});
+
+describe('the + of time/5m+', () => {
+  test('travels encoded and comes back as it was', () => {
+    const url = hitUrl(STATS_ENDPOINT, { path: STAT_EVENTS.time('5m+'), title: eventTitle('time/5m+'), event: true }, '1');
+    expect(url).toContain('p=time%2F5m%2B');
+    expect(new URL(url).searchParams.get('p')).toBe('time/5m+');
   });
 });

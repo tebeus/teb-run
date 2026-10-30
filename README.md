@@ -120,6 +120,10 @@ name, no scores, no user id. At most one event per name per run:
 | `fork/<id>-<L\|R>` (e.g. `fork/0-0-L`) | a fork taken: stage left and side |
 | `ending/<n>` (1..5) | an ending reached |
 | `share` | the SHARE button (or S) at the end of a run |
+| `daily/start`, `daily/end` | a daily-challenge run starts, and ends (game over or finish) |
+| `gameover/<id>` (e.g. `gameover/0-0`) | game over: the stage where time ran out |
+| `gear/hi` | the first time in a run the player shifts to high gear |
+| `time/0-1m`, `time/1-2m`, `time/2-3m`, `time/3-5m`, `time/5m+` | how long the run lasted, in bands, once at the end |
 
 Private, portal and `npm run dev` make no requests at all, and their builds
 don't even contain the GoatCounter address (checked by `npm run check:builds`).

@@ -388,6 +388,11 @@ export type RaceEvent =
 export interface RaceEngine {
   update(dt: number, actions: Actions): RaceEvent[];
   snapshot(): RaceSnapshot;
+  /**
+   * La gara è finita o abbandonata: la schermata esce e butta il motore.
+   * Chi lo avvolge (le statistiche) chiude i suoi conti. Opzionale.
+   */
+  close?(): void;
 }
 
 export type SpriteKind =

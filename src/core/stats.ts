@@ -36,10 +36,30 @@ export const STAT_EVENTS = {
   gameOver: (stageId: string): string => `gameover/${stageId}`,
   /** La prima volta in una partita che il giocatore mette la marcia alta. */
   gearHi: (): string => 'gear/hi',
+  /** Tempo di gara della partita, a fasce (`timeBand`): una volta per partita, alla fine. */
+  time: (band: TimeBand): string => `time/${band}`,
 } as const;
 
-/** Forma di ogni nome ammesso: minuscole, cifre, `-` e al più una `/`; L e R solo per i bivi. */
-export const EVENT_NAME = /^[a-z]+(\/[a-z0-9-]+(-[LR])?)?$/;
+/**
+ * Le fasce del tempo di gara (spec telefono e finali §E, risposta di Teb),
+ * legate a dove si muore oggi: game over alla 0-0 a 112 s, al livello 1 a
+ * 140-185 s, l'esperto arriva in 386 s.
+ */
+export type TimeBand = '0-1m' | '1-2m' | '2-3m' | '3-5m' | '5m+';
+
+/** La fascia di `seconds` secondi di gara. Pura. */
+export function timeBand(seconds: number): TimeBand {
+  if (!(seconds < 60)) {
+    if (seconds < 120) return '1-2m';
+    if (seconds < 180) return '2-3m';
+    if (seconds < 300) return '3-5m';
+    return '5m+';
+  }
+  return '0-1m';
+}
+
+/** Forma di ogni nome ammesso: minuscole, cifre, `-` e al più una `/`; L e R solo per i bivi, `+` solo in fondo (`time/5m+`). */
+export const EVENT_NAME = /^[a-z]+(\/[a-z0-9-]+(-[LR]|\+)?)?$/;
 
 /** Host da non contare: le prove in locale e in rete privata. Pura. */
 export function statsHostExcluded(hostname: string): boolean {
@@ -138,6 +158,8 @@ export function eventTitle(name: string): string {
       return `Game over at ${arg}`;
     case 'gear':
       return 'High gear';
+    case 'time':
+      return `Played ${arg}`;
     default:
       return name;
   }
@@ -227,6 +249,13 @@ export function trackRace(race: RaceEngine, stats: Stats, startStageId: string, 
   if (!stats.active) return race;
   let current = startStageId;
   let gearHiSent = false;
+  let timeSent = false;
+  /** La fascia del tempo di gara, una volta sola: alla fine, o quando la gara si chiude prima (QUIT, RESTART). */
+  const sendTime = (): void => {
+    if (timeSent) return;
+    timeSent = true;
+    stats.event(STAT_EVENTS.time(timeBand(race.snapshot().elapsed ?? 0)));
+  };
   return {
     update(dt, actions) {
       const before = actions.gearToggle && !gearHiSent ? race.snapshot().player.gear : null;
@@ -247,9 +276,14 @@ export function trackRace(race: RaceEngine, stats: Stats, startStageId: string, 
           stats.event(STAT_EVENTS.gameOver(e.stage.id));
         }
         if (daily && (e.type === 'finish' || e.type === 'gameover')) stats.event(STAT_EVENTS.dailyEnd());
+        if (e.type === 'finish' || e.type === 'gameover') sendTime();
       }
       return events;
     },
     snapshot: () => race.snapshot(),
+    close() {
+      sendTime();
+      race.close?.();
+    },
   };
 }

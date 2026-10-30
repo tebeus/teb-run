@@ -169,11 +169,13 @@ export function startPortrait(host: PortraitHost, wanted: () => boolean, view: (
       shown = on;
     }
     if (on) {
-      const box = portraitBox(win.innerWidth, win.innerHeight);
-      canvas.style.left = `${box.left}px`;
-      canvas.style.top = `${box.top}px`;
-      canvas.style.width = `${box.width}px`;
-      canvas.style.height = `${box.height}px`;
+      // A tutta finestra, col fondo scuro del CSS: il disegno 9:16 sta al
+      // centro (`object-fit: contain`, grande come `portraitBox`), e ai lati
+      // non si vede più il gioco sotto (collaudo di Teb su iPhone 13).
+      canvas.style.left = '0px';
+      canvas.style.top = '0px';
+      canvas.style.width = `${win.innerWidth}px`;
+      canvas.style.height = `${win.innerHeight}px`;
       drawPortrait(ctx, view((now - start) / 1000));
     }
     raf(frame);

@@ -391,6 +391,7 @@ export function createRaceScreen(deps: ScreenDeps): Screen {
       // girare a ciclo su game over, classifica e titolo (Minor 1 della
       // revisione finale): stopSong è l'unico modo per fermarlo.
       deps.audio.stopSong();
+      engine?.close?.();
       engine = null;
       snapshot = null;
       pause = closedPause();
